@@ -28,5 +28,5 @@ if __name__ == "__main__":
 
 '''to do: dict for ids-nums
           unpack reply
-		  print reply : Is primal or not 
+		  print reply : Is prime or not 
 '''
