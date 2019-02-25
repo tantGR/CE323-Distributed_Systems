@@ -1,14 +1,17 @@
-import clientMW as mw
+import clientMW as mw 
+import struct
+svcid = 5
 
 def main():
-	print "Client APP started.\n"
+	print "Client APP started."
 
 	while True:
-		ans = input("What to do next?\n((1) to give a new number/(2) to get an answer/(3) to exit): ")
-		print "ans", ans
+		ans = input("What to do next?\n(1) to give a new number/(2) to get an answer/(3) to exit: ")
 		if ans==1:
 			num = int(raw_input("Give an number: "))
-			id = mw.sendRequest(10,num,1)
+			buf = struct.pack('i',num)
+			#print len(buf)
+			id = mw.sendRequest(svcid,buf,len(buf))
 		elif ans==2:
 			num = int(raw_input("For which nunber? "))
 			blk = raw_input("Do you want to wait until I have the answer?(y/n) ")
@@ -23,3 +26,7 @@ def main():
 if __name__ == "__main__":
     main()
 
+'''to do: dict for ids-nums
+          unpack reply
+		  print reply : Is primal or not 
+'''

@@ -53,6 +53,3 @@ def MillerRabinPrimalityTest(number):
                 return False
             
     return True 
-k = input("Give an integer:")
-print simplePrimaryTest(k)
-#print MillerRabinPrimalityTest(k)
