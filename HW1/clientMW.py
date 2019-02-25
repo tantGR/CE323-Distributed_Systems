@@ -9,10 +9,8 @@ reqs_dict = {}
 def Requests():
 	print "requests" , ids
 
-
 def Replies():
 	print "replies"
-
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
