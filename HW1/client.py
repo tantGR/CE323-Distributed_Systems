@@ -2,7 +2,6 @@ import clientMW as mw
 import struct
 svcid = 5
 
-
 def main():
     print("Client APP started.\n")
     while True:
