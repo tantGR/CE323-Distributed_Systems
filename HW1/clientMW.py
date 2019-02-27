@@ -9,11 +9,12 @@ reqid=0;
 reqs_dict = {}
 MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
+SVCID = 50
 TTL = 1
+server_connected = 0
 
 def discover_servers():
-    #message = "Hello from client! Lalis is laughing with you!"
-    multicast_group = (MCAST_ADDR, MCAST_PORT)
+    multicast_group = (MCAST_ADDR, '')
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     #client.settimeout(3)
 
@@ -21,7 +22,7 @@ def discover_servers():
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     try:
-        print'sending "%s"' % message
+        message = struct.pack('!b',SVCID)
         sent = client.sendto(message, multicast_group)
 
         while True:
@@ -33,14 +34,42 @@ def discover_servers():
                 break
             else:
                 print("received %s from %s" % (data, server) )
+                return server
     finally:
         print 'closing socket'
         client.close()
 
+def next_req():
+    for id in reqs_dict:
+        if reqs_dict[id][4] == 0:
+            return id
+        elif with_ack == False: #and timeout
+            return id 
+
+
 def Requests():
-    
-    print("requests\n") 
-    
+    sent_reqs = 0
+
+    print("requests\n")
+    if server_connected==0:
+        server_addr = discover_servers()
+        server.socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    while True:
+        #lock
+        sent_reqs +=1
+        reqTosend = next_req()
+        (svcid,buf,len,sent,with_ack,times_sent) = reqs_dict[sent_reqs]
+        #unlock
+        if sent == True:
+            del reqs_dict[ids]
+        else:
+            times_sent += 1
+
+            packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
+            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent)
+            server.sendto(packet,server_addr)
+            
     
 
 def Replies():
@@ -97,7 +126,8 @@ def sendRequest(svcid, buf, len):
         Req.start()
         Repl.start()
     ids += 1
-    reqs_dict[ids] = (svcid,buf,len) 
+    reqs_dict[ids] = (svcid,buf,len,False,False,0)#send,ack_received 
+    #unlock
     return ids
 
 def getReply(reqid, buf, len, block):
