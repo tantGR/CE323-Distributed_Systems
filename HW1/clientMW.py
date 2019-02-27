@@ -7,11 +7,16 @@ import socket
 nlife=0;
 reqid=0;
 reqs_dict = {}
+repls_dict= {}  #{'reqid',(buf,len)} buf = true/false len =1(nomizo)
 MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
+reqs_nack = 0 #num of requests for which we have bot recieved ack yet (CS)!!
 server_connected = 0
+timeout = 2
+
+dict_lock = threading.Lock()
 
 def discover_servers():
     multicast_group = (MCAST_ADDR, '')
@@ -44,7 +49,11 @@ def next_req():
         if reqs_dict[id][4] == 0:
             return id
         elif with_ack == False: #and timeout
-            return id 
+            return id
+
+        else:
+            return 0    
+
 
 
 def Requests():
@@ -56,24 +65,30 @@ def Requests():
         server.socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     while True:
-        #lock
-        sent_reqs +=1
-        reqTosend = next_req()
-        (svcid,buf,len,sent,with_ack,times_sent) = reqs_dict[sent_reqs]
-        #unlock
+        with dict_lock:         #LOCK AND UNLOCK IN THE END
+            sent_reqs +=1
+            reqTosend = next_req()
+            if reqTosend == 0:
+                continue      #or use a semaphore(or signal) to know when ther is a new req 
+            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
+
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
-
+            reqs_nack += 1 #(CS)
+            timeout = 0
             packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
-            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent)
+            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
             server.sendto(packet,server_addr)
             
     
 
 def Replies():
 	print("replies\n")
+    server.socket.socket(sock.AF_INET, socket.SOCK_DGRAM)
+    server.bind(server_addr)
+
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -125,10 +140,23 @@ def sendRequest(svcid, buf, len):
         Repl = MyThread(Replies, 2, "Replies")
         Req.start()
         Repl.start()
-    ids += 1
-    reqs_dict[ids] = (svcid,buf,len,False,False,0)#send,ack_received 
-    #unlock
-    return ids
+    with dict_lock:    #LOCK AND UNLOCK IN THE END
+        ids += 1
+        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received 
+    return ids          #isos to buf  prepei na einai se koini thesi sti mnimi
 
 def getReply(reqid, buf, len, block):
-	print("popa") 
+    
+    if reqid in repls_dict:
+        #epestrepse tin apantisi - se koini thesi sti mnimi
+    else:
+        if block == False:
+            return 0 #no reply available
+        else:
+            #block
+            while reqid not in repls_dict:    #isos, alla oxi poli kalo
+                sleep(2)
+            
+
+
+# remember TODO errors check!!!
