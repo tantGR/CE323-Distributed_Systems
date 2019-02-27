@@ -3,63 +3,46 @@
 
 import threading
 import struct
+import socket
 nlife=0;
 reqid=0;
 reqs_dict = {}
 MCAST_ADDR = "224.0.0.7"
-MCAST_PORT = 5
+MCAST_PORT = 2019
+TTL = 1
 
-#req_t = MyThread(func=Requests,tid=1,tname="Requests",svcid=5,buf,len,nlife)
+def discover_servers():
+    #message = "Hello from client! Lalis is laughing with you!"
+    multicast_group = (MCAST_ADDR, MCAST_PORT)
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    #client.settimeout(3)
+
+    ttl = struct.pack('b', TTL)# ttl=1=local network segment.
+    client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+
+    try:
+        print'sending "%s"' % message
+        sent = client.sendto(message, multicast_group)
+
+        while True:
+            print("waiting to receive..\n")
+            try:
+                data, server = client.recvfrom(16)
+            except socket.timeout:
+                print("timeout. No more responses\n")
+                break
+            else:
+                print("received %s from %s" % (data, server) )
+    finally:
+        print 'closing socket'
+        client.close()
+
 def Requests():
     
     print("requests\n") 
     
-    #TODO: Discover UDP Multicast()
-    multicast_group = (MCAST_ADDR, MCAST_PORT)
-    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    host = client.gethostbyname(socket.gethostname())# the public network interface
-    print(socket.gethostbyname(socket.gethostname()))
-    client.bind((host, 0))
-    client.settimeout(0.010)
-
-<<<<<<< HEAD
-=======
-    # Set the time-to-live for messages to 1 so they do not go past the
-    ttl = struct.pack('b', 1)# ttl=1=local network segment.
-    client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-    
-    # Sent message to Multicast and expect multiple responses 
-    # so use a loop to call recvfrom() until it times out.
-    try:
-        # Send data to the multicast group
-        print >>sys.stderr, 'sending "%s"' % message
-        sent = client.sendto(message, multicast_group)
-
-        # Look for responses from all recipients
-        while True:
-            #print >>sys.stderr, 'waiting to receive'
-            print("waiting to receive..\n")
-            try:
-                data, server = client.recvfrom(16)
-            except client.timeout:
-                print("timeout. No more responses\n")
-                #print >>sys.stderr, 'timed out, no more responses'
-                break
-            else:
-                 # else block performs actions that must occur 
-                 #when no exception occurs and that do not occur 
-                 # when exceptions are handled
-                #print >>sys.stderr, 'received "%s" from %s' % (data, server)
-                print("received %s from %s" % (data, server) )
-    finally:
-        print >>sys.stderr, 'closing socket'
-        sock.close()
-    
-    
-    client.close()
     
 
->>>>>>> e7e05fb3e214859350581e68de3034373209527b
 def Replies():
 	print("replies\n")
 
