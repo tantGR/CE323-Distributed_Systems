@@ -24,7 +24,7 @@ while True:
 	#print 'received %s bytes from %s' % (len(data), address)
 	#print data 
 	id = struct.unpack('!b',data)
-	print(id[0])
+	print id[0]
 	if id[0] == SVCID:
 		reply = "Yes it's me!"
 	else:

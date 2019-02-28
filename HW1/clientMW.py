@@ -12,7 +12,7 @@ MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
 server_connected = 0
-
+Req = 0;Repl=0;ids=0
 def discover_servers():
     multicast_group = (MCAST_ADDR, '')
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -36,7 +36,7 @@ def discover_servers():
                 print("received %s from %s" % (data, server) )
                 return server
     finally:
-        print 'closing socket'
+        print('closing socket')
         client.close()
 
 def next_req():
@@ -106,19 +106,11 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     return 0
 
 def sendRequest(svcid, buf, len):
-	#global ids, Repl, Req, reqs_dict
-    
+    global Req,Repl,ids
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
-    if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
-        return -1
+    #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
+    #    return -1
 
-    
-    #TODO: Steile sto 1o Thread Requests kai sto 2o ta replies
-    #req_t = MyThread(Requests, 1, "Requests")
-    #rep_t = MyThread(Replies, 2, "Replies")
-    
-
-    print("reqid is: "+str(reqid)+"\n")
     
     if not(Req != 0 and Repl!=0 and Req.isAlive() and Repl.isAlive()):
         Req = MyThread(Requests, 1, "Requests")
@@ -127,7 +119,7 @@ def sendRequest(svcid, buf, len):
         Repl.start()
     ids += 1
     reqs_dict[ids] = (svcid,buf,len,False,False,0)#send,ack_received 
-    #unlock
+    
     return ids
 
 def getReply(reqid, buf, len, block):
