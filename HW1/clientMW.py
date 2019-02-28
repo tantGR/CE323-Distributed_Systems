@@ -19,9 +19,9 @@ timeout = 2
 dict_lock = threading.Lock()
 
 def discover_servers():
-    multicast_group = (MCAST_ADDR, '')
+    multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    #client.settimeout(3)
+    client.settimeout(10)
 
     ttl = struct.pack('b', TTL)# ttl=1=local network segment.
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
@@ -35,8 +35,8 @@ def discover_servers():
             try:
                 data, server = client.recvfrom(16)
             except socket.timeout:
-                print("timeout. No more responses\n")
-                break
+                print("No server found\n")
+                return -1
             else:
                 print("received %s from %s" % (data, server) )
                 return server
@@ -46,14 +46,13 @@ def discover_servers():
 
 def next_req():
     for id in reqs_dict:
+        reqs_dict[id][5] -=1
         if reqs_dict[id][4] == 0:
             return id
-        elif with_ack == False: #and timeout
+        elif with_ack == False and reqs_dict[id][5] <= 0: #and timeout
             return id
-
         else:
-            return 0    
-
+            return -1    
 
 
 def Requests():
@@ -64,11 +63,12 @@ def Requests():
         server_addr = discover_servers()
         server.socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+
     while True:
         with dict_lock:         #LOCK AND UNLOCK IN THE END
             sent_reqs +=1
             reqTosend = next_req()
-            if reqTosend == 0:
+            if reqTosend == -1:
                 continue      #or use a semaphore(or signal) to know when ther is a new req 
             (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
 
@@ -77,7 +77,7 @@ def Requests():
         else:
             times_sent += 1
             reqs_nack += 1 #(CS)
-            timeout = 0
+            timeout = 10
             packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
             reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
             server.sendto(packet,server_addr)
@@ -88,6 +88,8 @@ def Replies():
 	print("replies\n")
     server.socket.socket(sock.AF_INET, socket.SOCK_DGRAM)
     server.bind(server_addr)
+
+
 
 
 class MyThread(threading.Thread):
@@ -127,11 +129,6 @@ def sendRequest(svcid, buf, len):
     if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
         return -1
 
-    
-    #TODO: Steile sto 1o Thread Requests kai sto 2o ta replies
-    #req_t = MyThread(Requests, 1, "Requests")
-    #rep_t = MyThread(Replies, 2, "Replies")
-    
 
     print("reqid is: "+str(reqid)+"\n")
     
