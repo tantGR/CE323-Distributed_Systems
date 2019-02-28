@@ -3,7 +3,7 @@ import struct
 svcid = 5
 
 def main():
-<<<<<<< HEAD
+
 	print "Client APP started."
 
 	while True:
@@ -23,9 +23,8 @@ def main():
 			res = mw.getReply(id,num,len,block)	
 		elif ans==3:
 			break   
-=======
-    print("Client APP started.\n")
     while True:
+    	
         ans = int(input("What to do next?\n(1) to give a new number/(2) to get an answer/(3) to exit: "))
         if ans==1:
             num = int(input("Give an number: "))
@@ -42,7 +41,6 @@ def main():
         elif ans==3:
             break
         
->>>>>>> e7e05fb3e214859350581e68de3034373209527b
 
 if __name__ == "__main__":
     main()
