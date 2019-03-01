@@ -19,15 +19,13 @@ reqs_dict = {}
 repls_dict= {}  #{'reqid',(buf,len)} buf = true/false len =1(nomizo)
 MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
-SVCID = 50
+SVCID = 0
 TTL = 1
-<<<<<<< HEAD
 reqs_nack = 0 #num of requests for which we have bot recieved ack yet (CS)!!
 server_connected = 0
 timeout = 2
 
 dict_lock = threading.Lock()
-=======
 Req = 0;Repl=0;ids=0
 timeout=2  
 reqs_nack=0
@@ -36,16 +34,10 @@ new_reqs=0
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
 
->>>>>>> christos
-
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-<<<<<<< HEAD
-    client.settimeout(10)
-=======
-    #client.settimeout(3)https://wiki.python.org/moin/UdpCommunication
->>>>>>> christos
+    #client.settimeout(10)
 
     ttl = struct.pack('b', TTL)# ttl=1=local network segment.
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
@@ -87,16 +79,14 @@ def Requests():
     server_addr = discover_servers()
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-
     while True:
-<<<<<<< HEAD
         with dict_lock:         #LOCK AND UNLOCK IN THE END
             sent_reqs +=1
             reqTosend = next_req()
             if reqTosend == -1:
                 continue      #or use a semaphore(or signal) to know when ther is a new req 
             (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
-=======
+
         if new_reqs == 0 and reqs_nack == 0:
             sem.acquire()
         with dict_lock: #LOCK AND UNLOCK IN THE END 
@@ -107,35 +97,24 @@ def Requests():
             if times_sent == 0:
                 new_reqs -= 1
             #unlock
->>>>>>> christos
 
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
-<<<<<<< HEAD
             reqs_nack += 1 #(CS)
             timeout = 10
-            packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
-            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
-=======
             packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
             reqs_dict[reqTosend] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
->>>>>>> christos
             server.sendto(packet,server_addr)
             
 
 def Replies():
-<<<<<<< HEAD
 	print("replies\n")
     server.socket.socket(sock.AF_INET, socket.SOCK_DGRAM)
     server.bind(server_addr)
 
-
-
-=======
 	return #print("replies\n")
->>>>>>> christos
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -179,11 +158,15 @@ def sendRequest(svcid, buf, len):
         Repl = MyThread(Replies, 2, "Replies")
         Req.start()
         Repl.start()
-<<<<<<< HEAD
+        SVCID = svcid
+
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
-        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received 
-    return ids          #isos to buf  prepei na einai se koini thesi sti mnimi
+        new_reqs += 1
+        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received
+        if new_reqs == 1:
+            sem.release()
+    return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
 def getReply(reqid, buf, len, block):
     
@@ -200,18 +183,3 @@ def getReply(reqid, buf, len, block):
 
 
 # remember TODO errors check!!!
-=======
-
-    with dict_lock:    #LOCK AND UNLOCK IN THE END
-        ids += 1
-        new_reqs += 1
-        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received
-        if new_reqs == 1:
-            sem.release()
-    return ids #isos to buf  prepei na einai se koini thesi sti mnimi
-
-
-
-def getReply(reqid, buf, len, block):
-	print("popa")
->>>>>>> christos
