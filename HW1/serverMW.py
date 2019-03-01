@@ -4,52 +4,21 @@ import sys
 import threading
 
 multicast_group = "224.0.0.7"
-<<<<<<< HEAD
-server_address = ('',2019)
-reqs_dict = {}
-
-def Receiver():
-	while True:
-		print '\nwaiting to receive message'
-		data, address = sock.recvfrom(1024)
-=======
 server_address = ('',2019)  
 Receiver = 0
 
 repls_dict = {}
->>>>>>> master
-
-		id = struct.unpack('!b',data)
-		print id[0]
-		if id[0] == SVCID:
-			reply = "Yes it's me!"
-		else:
-			reply = "Not me!"	   
-		print 'sending ack to', address
-		sock.sendto(reply, address)
 
 
-<<<<<<< HEAD
-		
-		
-=======
+
 	#afto gia kanonika paketa. Twra mono to discovery
 	#(svcid,sent_reqs,buf,len) = struct.unpack('!bbsb',data)#type of buf
 	#print("data received from "+address+" are: "+buf)
->>>>>>> master
 
 	#print('sending acknowledgement to', address)
 	#sock.sendto(reply, address)
 def Receiver():
 
-<<<<<<< HEAD
-
-
-
-
-def Sender():
-
-=======
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	group = socket.inet_aton(multicast_group)
 	mreq = struct.pack('4sL', group, socket.INADDR_ANY)
@@ -84,7 +53,6 @@ def Sender():
 	#		reply = print("Not me!\n")
 
 #def Sender():
->>>>>>> master
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -96,33 +64,6 @@ class MyThread(threading.Thread):
 	def run(self):
 		self._funcToRun(*self._args)
 
-<<<<<<< HEAD
-
-def register(svcid):
-	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	group = socket.inet_aton(multicast_group)
-	mreq = struct.pack('4sL', group, socket.INADDR_ANY)
-	sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-	sock.bind(server_address)
-	
-	Sender = MyThread(Sender,1,"Sender")
-	Receiver = MyThread(Receiver,2,"Receiver")
-
-	return 1
-
-#def unregister(svcid):
-
-
-#def getRequest(svcid,buf,len):
-
-
-
-
-#def sendReply(reqid,buf,len):
-
-register(3)
-
-=======
 def register(svcid):
 	global Receiver
 	#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -143,5 +84,3 @@ def register(svcid):
 #def sendReply(reqid,buf,len):
 
 register(50)
->>>>>>> master
-

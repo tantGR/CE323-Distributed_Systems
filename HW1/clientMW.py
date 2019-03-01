@@ -32,11 +32,7 @@ sem=threading.Semaphore(0)
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-<<<<<<< HEAD
-    client.settimeout(10)
-=======
-    #client.settimeout(3)https://wiki.python.org/moin/UdpCommunication
->>>>>>> master
+    #client.settimeout(3)
 
     ttl = struct.pack('b', TTL)# ttl=1=local network segment.
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
@@ -67,16 +63,8 @@ def next_req():
         reqs_dict[id][5] -=1
         if reqs_dict[id][4] == 0:
             return id
-<<<<<<< HEAD
-        elif with_ack == False and reqs_dict[id][5] <= 0: #and timeout
-            return id
-        else:
-            return -1    
-=======
         elif with_ack == False: #and timeout
             return id 
->>>>>>> master
-
 
 def Requests():
     global new_reqs, reqs_nack
@@ -90,41 +78,23 @@ def Requests():
         with dict_lock: #LOCK AND UNLOCK IN THE END 
             reqTosend = next_req()
             if reqTosend == -1:
-<<<<<<< HEAD
-                continue      #or use a semaphore(or signal) to know when ther is a new req 
-            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
-=======
                 continue #or use a semaphore(or signal) to know when ther is a new req 
             (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
             #unlock
->>>>>>> master
+
 
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
-<<<<<<< HEAD
-            reqs_nack += 1 #(CS)
-            timeout = 10
-            packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
-            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
-=======
             packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
             reqs_dict[reqTosend] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
->>>>>>> master
             server.sendto(packet,server_addr)
             
-
-
-
-<<<<<<< HEAD
-
-=======
 def Replies():
 	return #print("replies\n")
->>>>>>> master
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -159,15 +129,8 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
 def sendRequest(svcid, buf, len):
     global Req,Repl,ids,new_reqs
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
-<<<<<<< HEAD
-    if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
-        return -1
-
-=======
     #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
-    #    return -1
->>>>>>> master
-
+     #   return -1
     
     if not(Req != 0 and Repl!=0 and Req.isAlive() and Repl.isAlive()):
         Req = MyThread(Requests, 1, "Requests")
@@ -184,10 +147,7 @@ def sendRequest(svcid, buf, len):
     return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
 
-
-<<<<<<< HEAD
-# remember TODO errors check!!!
-=======
 def getReply(reqid, buf, len, block):
 	print("popa")
->>>>>>> master
+
+# remember TODO errors check!!!
