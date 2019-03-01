@@ -30,7 +30,9 @@ def Receiver():
 		data, address = sock.recvfrom(1024)
 		#print('received %s bytes from %s' % (len(data), address))
 
-		(key,) = struct.unpack('!I', data[4:])#data is a tuple 
+		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
+		print (key)
+		data = data[4:]
 		#print("tuple size is "+str(len(data)))
 		#print("data received from are: "+str(len(data)))
 		if key == 1995:
