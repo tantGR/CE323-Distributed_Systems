@@ -40,7 +40,7 @@ def Receiver():
 			sent = sock.sendto(message,address)#reply to the Discover Request
 			print("You found me!\n")
 		elif key == 1997:
-			(svcid,reqid,buf,len) = struct.unpack('!bbsb',data)
+			[svcid,reqid,buf,len] = struct.unpack('!bbsb',data)
 			print("Request ",reqid," arrived!\n")
 		else:
 			continue
