@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 import socket
 import struct 
 import sys
@@ -86,4 +84,4 @@ def register(svcid):
 #def sendReply(reqid,buf,len):
 
 register(50)
->>>>>>> christos
+
