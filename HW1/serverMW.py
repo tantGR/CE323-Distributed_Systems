@@ -1,43 +1,13 @@
 import socket
 import struct 
 import sys
+import threading
 
 multicast_group = "224.0.0.7"
-server_address = ('',2019)
-SVCID = 50
+server_address = ('',2019)  
+Receiver = 0
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-
-group = socket.inet_aton(multicast_group)
-mreq = struct.pack('4sL', group, socket.INADDR_ANY)
-sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-#sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
-sock.bind(server_address)
-
-
-
-while True:
-	print('\nwaiting to receive message')
-	data, address = sock.recvfrom(1024)
-	print('received %s bytes from %s' % (len(data), address))
-
-	data = struct.unpack('!b',data)#data is a tuple
-	print("tuple size is "+str(len(data)))
-	print("data received from are: "+str(len(data)))
-	if len(data)==1 and data[0] == SVCID:#we sent only SVCID in discovery
-		print("Yes it's me!(Discovery mode)\n")
-		ttl = struct.pack('b', 1)# ttl=1=local network segment.
-		server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-		server.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-		message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
-		sent = server.sendto(message,address)#reply to the Discover Request
-
-	elif len(data)==4 and data[0] ==SVCID: #normal packet. Send more data now
-		print("Yes its me!(Communication mode)\n") 
-		sock.sendto(reply, address)
-	else:
-		reply = print("Not me!\n")	  
+repls_dict = {}
 
 
 	#afto gia kanonika paketa. Twra mono to discovery
@@ -46,4 +16,70 @@ while True:
 
 	#print('sending acknowledgement to', address)
 	#sock.sendto(reply, address)
+def Receiver():
 
+	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	group = socket.inet_aton(multicast_group)
+	mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+	sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+	sock.bind(server_address)
+
+	while True:
+		print('\nwaiting to receive message')
+		data, address = sock.recvfrom(1024)
+		#print('received %s bytes from %s' % (len(data), address))
+
+		(key,) = struct.unpack('!I', data[4:])#data is a tuple 
+		#print("tuple size is "+str(len(data)))
+		#print("data received from are: "+str(len(data)))
+		if key == 1995:
+			message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
+			sent = sock.sendto(message,address)#reply to the Discover Request
+			print("You found me!\n")
+		elif key == 1997:
+			(svcid,reqid,buf,len) = struct.unpack('!bbsb',data)
+			print("Request ",reqid," arrived!\n")
+		else:
+			continue
+	#	if len(data)==1 and data[0] == SVCID:#we sent only SVCID in discovery
+	#		print("Yes it's me!(Discovery mode)\n")
+	#		ttl = struct.pack('b', 1)# ttl=1=local network segment.
+			#server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+			#server.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+			#message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
+	#		sent = server.sendto(message,address)#reply to the Discover Request
+	#	else:
+	#		reply = print("Not me!\n")
+
+#def Sender():
+
+class MyThread(threading.Thread):
+	def __init__(self, funcToRun, threadID, name, *args):
+		threading.Thread.__init__(self)
+		self.threadID = threadID
+		self.name = name
+		self._funcToRun = funcToRun
+		self._args = args#empty
+	def run(self):
+		self._funcToRun(*self._args)
+
+def register(svcid):
+	global Receiver
+	#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	#group = socket.inet_aton(multicast_group)
+	#mreq = struct.pack('4sL', group, socket.INADDR_ANY)
+	#sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+	#sock.bind(server_address)
+
+	#Sender = MyThread(Sender,1,"Sender")
+	Receiver = MyThread(Receiver,2,"Receiver")
+	Receiver.start()
+
+	return 1 
+#def unregister(svcid):
+
+#def getRequest(svcid,buf,len):
+
+#def sendReply(reqid,buf,len):
+
+register(50)

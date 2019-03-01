@@ -19,7 +19,8 @@ def main():
 				block = False	
 			res = mw.getReply(id,num,len,block)	
 		elif ans==3:
-			break
+			print("Goodbye!\n")
+			break        #kill threads
 		
 
 if __name__ == "__main__":

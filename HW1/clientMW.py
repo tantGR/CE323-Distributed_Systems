@@ -15,14 +15,15 @@ import threading
 import struct
 import socket
 nlife=0;
-reqid=0;
 reqs_dict = {}
 MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
 Req = 0;Repl=0;ids=0
-timeout=2
+timeout=2  
+reqs_nack=0
+new_reqs=0
 
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
@@ -37,7 +38,7 @@ def discover_servers():
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     try:
-        message = struct.pack('!b',SVCID)
+        message = struct.pack('!Ib',1995,SVCID) 
         sent = client.sendto(message, multicast_group)
 
         while True:
@@ -49,12 +50,15 @@ def discover_servers():
                 break
             else:
                 #print("received %s from %s" % (data, server) )
+                client.close()
                 return server
     finally:
         #print('closing socket')
         client.close()
 
 def next_req():
+    if ids == 0:
+        return -1
     for id in reqs_dict:
         if reqs_dict[id][4] == 0:
             return id
@@ -63,34 +67,30 @@ def next_req():
 
 
 def Requests():
-    sent_reqs = 0
-    server_connected=0
-
-    #print("requests\n")
-    if server_connected==0:
-        server_addr = discover_servers()
-        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    global new_reqs, reqs_nack
+    server_addr = discover_servers()
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     while True:
-        with dict_lock: #LOCK AND UNLOCK IN THE END
-            sem.acquire() 
-            sent_reqs +=1
+        if new_reqs == 0 and reqs_nack == 0:
+            sem.acquire()
+        with dict_lock: #LOCK AND UNLOCK IN THE END 
             reqTosend = next_req()
-            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
             if reqTosend == -1:
                 continue #or use a semaphore(or signal) to know when ther is a new req 
+            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[reqTosend]
+            if times_sent == 0:
+                new_reqs -= 1
             #unlock
 
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
-            packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
-            packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
-            reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent)
+            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
+            reqs_dict[reqTosend] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
             server.sendto(packet,server_addr)
             
-    
 
 def Replies():
 	return #print("replies\n")
@@ -126,7 +126,7 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     return 0
 
 def sendRequest(svcid, buf, len):
-    global Req,Repl,ids
+    global Req,Repl,ids,new_reqs
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
     #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
     #    return -1
@@ -140,8 +140,10 @@ def sendRequest(svcid, buf, len):
 
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
+        new_reqs += 1
         reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received
-        sem.release()
+        if new_reqs == 1:
+            sem.release()
     return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
 
