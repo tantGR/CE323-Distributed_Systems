@@ -1,8 +1,15 @@
 import Primality_Test as lib
 import serverMW as mw
+<<<<<<< HEAD
 SVCID = 50
 buf = 0
 len = 0 
+=======
+import struct
+
+>>>>>>> master
+
+SVCID = 50
 
 def main():
 

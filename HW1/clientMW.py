@@ -1,96 +1,130 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+##### allages poy ekana ####
+# 0) sxolia se merika simeia
+# 1) evgala to server_connected apo global se local variable
+# 2) an connected, to vala = 1
+# 3) stin 67, allaksa tin seira tou sent++. Prepei apo miden na ksekina
+# 4) stin 47(next_req() ), prepei na xoume ena while(1).Episis prepei na kratame mia
+# static metavliti, wste na nai dikaio to search sto dictionary 
+# 5) an times_sent > MAX_TIMEOUT, tote, del[reqid]
+# 6) sto pack() to format einai sigoura swsto?!
+# 7) prosthiki semaphores
 import threading
 import struct
 import socket
 nlife=0;
-reqid=0;
 reqs_dict = {}
-repls_dict= {}  #{'reqid',(buf,len)} buf = true/false len =1(nomizo)
 MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
-reqs_nack = 0 #num of requests for which we have bot recieved ack yet (CS)!!
-server_connected = 0
-timeout = 2
+Req = 0;Repl=0;ids=0
+timeout=2  
+reqs_nack=0
+new_reqs=0
 
 dict_lock = threading.Lock()
+sem=threading.Semaphore(0)
+
 
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+<<<<<<< HEAD
     client.settimeout(10)
+=======
+    #client.settimeout(3)https://wiki.python.org/moin/UdpCommunication
+>>>>>>> master
 
     ttl = struct.pack('b', TTL)# ttl=1=local network segment.
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     try:
-        message = struct.pack('!b',SVCID)
+        message = struct.pack('!Ib',1995,SVCID) 
         sent = client.sendto(message, multicast_group)
 
         while True:
-            print("waiting to receive..\n")
+            #print("waiting to receive..\n")
             try:
                 data, server = client.recvfrom(16)
             except socket.timeout:
                 print("No server found\n")
                 return -1
             else:
-                print("received %s from %s" % (data, server) )
+                #print("received %s from %s" % (data, server) )
+                client.close()
                 return server
     finally:
-        print 'closing socket'
+        #print('closing socket')
         client.close()
 
 def next_req():
+    if ids == 0:
+        return -1
     for id in reqs_dict:
         reqs_dict[id][5] -=1
         if reqs_dict[id][4] == 0:
             return id
+<<<<<<< HEAD
         elif with_ack == False and reqs_dict[id][5] <= 0: #and timeout
             return id
         else:
             return -1    
+=======
+        elif with_ack == False: #and timeout
+            return id 
+>>>>>>> master
 
 
 def Requests():
-    sent_reqs = 0
-
-    print("requests\n")
-    if server_connected==0:
-        server_addr = discover_servers()
-        server.socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    global new_reqs, reqs_nack
+    server_addr = discover_servers()
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
     while True:
-        with dict_lock:         #LOCK AND UNLOCK IN THE END
-            sent_reqs +=1
+        if new_reqs == 0 and reqs_nack == 0:
+            sem.acquire()
+        with dict_lock: #LOCK AND UNLOCK IN THE END 
             reqTosend = next_req()
             if reqTosend == -1:
+<<<<<<< HEAD
                 continue      #or use a semaphore(or signal) to know when ther is a new req 
             (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[sent_reqs]
+=======
+                continue #or use a semaphore(or signal) to know when ther is a new req 
+            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[reqTosend]
+            if times_sent == 0:
+                new_reqs -= 1
+            #unlock
+>>>>>>> master
 
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
+<<<<<<< HEAD
             reqs_nack += 1 #(CS)
             timeout = 10
             packet = struct.pack('!bbsb',svcid,sent_reqs,buf,len)#type of buf
             reqs_dict[sent_reqs] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
+=======
+            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
+            reqs_dict[reqTosend] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
+>>>>>>> master
             server.sendto(packet,server_addr)
             
-    
 
+
+
+<<<<<<< HEAD
+
+=======
 def Replies():
-	print("replies\n")
-    server.socket.socket(sock.AF_INET, socket.SOCK_DGRAM)
-    server.bind(server_addr)
-
-
-
+	return #print("replies\n")
+>>>>>>> master
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -109,7 +143,7 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
         reqsFile = r'reqsFile.txt'
         data = (reqid,svcid,buf,len,nlife)
         format_string = "%s,%s,%s,%s,%s\n"
-        print(format_string % data)
+        #print(format_string % data)
 
         #'a' means append at endOfFile 
         with open(reqsFile, 'a') as f:
@@ -123,37 +157,37 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     return 0
 
 def sendRequest(svcid, buf, len):
-	#global ids, Repl, Req, reqs_dict
-    
+    global Req,Repl,ids,new_reqs
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
+<<<<<<< HEAD
     if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
         return -1
 
+=======
+    #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
+    #    return -1
+>>>>>>> master
 
-    print("reqid is: "+str(reqid)+"\n")
     
     if not(Req != 0 and Repl!=0 and Req.isAlive() and Repl.isAlive()):
         Req = MyThread(Requests, 1, "Requests")
         Repl = MyThread(Replies, 2, "Replies")
         Req.start()
         Repl.start()
+
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
-        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received 
-    return ids          #isos to buf  prepei na einai se koini thesi sti mnimi
-
-def getReply(reqid, buf, len, block):
-    
-    if reqid in repls_dict:
-        #epestrepse tin apantisi - se koini thesi sti mnimi
-    else:
-        if block == False:
-            return 0 #no reply available
-        else:
-            #block
-            while reqid not in repls_dict:    #isos, alla oxi poli kalo
-                sleep(2)
-            
+        new_reqs += 1
+        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received
+        if new_reqs == 1:
+            sem.release()
+    return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
 
+
+<<<<<<< HEAD
 # remember TODO errors check!!!
+=======
+def getReply(reqid, buf, len, block):
+	print("popa")
+>>>>>>> master
