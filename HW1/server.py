@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 import Primality_Test as lib
 import serverMW as mw
 import struct
@@ -14,4 +12,3 @@ def main():
 if __name__ == "__main__":
     main()
 
->>>>>>> christos

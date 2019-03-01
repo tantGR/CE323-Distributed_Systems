@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-=======
 import clientMW as mw 
 import struct
 svcid = 5
-
 
 
 def main():
@@ -34,4 +31,3 @@ if __name__ == "__main__":
           unpack reply
 		  print reply : Is prime or not 
 '''
->>>>>>> christos
