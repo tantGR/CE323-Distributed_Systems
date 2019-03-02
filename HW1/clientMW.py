@@ -21,7 +21,7 @@ MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
 Req = 0;Repl=0;ids=0
-timeout=2  
+timeout=10 
 reqs_nack=0
 new_reqs=0
 
@@ -60,11 +60,12 @@ def next_req():
     if ids == 0:
         return -1
     for id in reqs_dict:
+        reqs_dict[id][6] -= 1#timeout
         if reqs_dict[id][4] == 0:
             return id
-        elif with_ack == False: #and timeout
-            return id 
-
+        elif with_ack == False and reqs_dict[id][6] == 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries            return id 
+            return id
+    return -1
 
 def Requests():
     global new_reqs, reqs_nack
@@ -78,7 +79,7 @@ def Requests():
             reqTosend = next_req()
             if reqTosend == -1:
                 continue #or use a semaphore(or signal) to know when ther is a new req 
-            (svcid,buf,len,sent,with_ack,times_sent,timeout) = reqs_dict[reqTosend]
+            [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
             #unlock
@@ -88,7 +89,7 @@ def Requests():
         else:
             times_sent += 1
             packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
-            reqs_dict[reqTosend] = (svcid,buf,len,sent,with_ack,times_sent,timeout)
+            reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
             server.sendto(packet,server_addr)
             
 
@@ -141,7 +142,7 @@ def sendRequest(svcid, buf, len):
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
         new_reqs += 1
-        reqs_dict[ids] = (svcid,buf,len,False,False,0,timeout)#send,ack_received
+        reqs_dict[ids] = [svcid,buf,len,False,False,0,timeout]#send,ack_received
         if new_reqs == 1:
             sem.release()
     return ids #isos to buf  prepei na einai se koini thesi sti mnimi

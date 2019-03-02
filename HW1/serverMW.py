@@ -28,16 +28,15 @@ def Receiver():
 		print('\nwaiting to receive message')
 		data, address = sock.recvfrom(1024)
 		#print('received %s bytes from %s' % (len(data), address))
-
-		(key,) = struct.unpack('!I', data[4:])#data is a tuple 
-		#print("tuple size is "+str(len(data)))
-		#print("data received from are: "+str(len(data)))
+		
+		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 		#print("data received from are: "+str(len(data)))
+		data=data[4:]
 		if key == 1995:
 			message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
 			sent = sock.sendto(message,address)#reply to the Discover Request
 			print("You found me!\n")
 		elif key == 1997:
-			(svcid,reqid,buf,len) = struct.unpack('!bbsb',data)
+			[svcid,reqid,buf,len] = struct.unpack('!bbsb',data)
 			print("Request ",reqid," arrived!\n")
 		else:
 			continue
