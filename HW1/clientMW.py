@@ -21,13 +21,13 @@ MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
 Req = 0;Repl=0;ids=0
-timeout=10 
+timeout=1000
 reqs_nack=0
 new_reqs=0
 
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
-
+recv_sem=threading.Semaphore(0)
 
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
@@ -82,19 +82,38 @@ def Requests():
             [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
+                reqs_nack = reqs_nack + 1
+                if reqs_nack==1:
+                    recv_sem.acquire()  
+            #print("init returned:",reqTosend,"new_reqs=",new_reqs,"and reqs_nack=",reqs_nack,"\n")
             #unlock
 
         if sent == True:
             del reqs_dict[ids]
         else:
             times_sent += 1
-            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
+            packet = struct.pack('!IIbbsb',1997, reqTosend,svcid,reqTosend,buf,len)#type of buf "lakis"
             reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
             server.sendto(packet,server_addr)
             
 
+# allages: nomizw pws prepei o client na stelnei ston server torequest_id
 def Replies():
-	return #print("replies\n")
+    global new_reqs, reqs_nack
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    
+    while True:
+        if reqs_nack==0:
+            recv_sem.acquire()
+        data, server = client.recvfrom(16)
+        [reqToAck,svcid,buf,len,sent,with_ack,times_sent,timeout] = struct.unpack('!IIbbsb',data)
+        sent=True
+        with dict_lock:
+            reqs_dict[reqToAck] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
+            reqs_nack=reqs_nack-1
+
+
+    return #print("replies\n")
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -145,6 +164,8 @@ def sendRequest(svcid, buf, len):
         reqs_dict[ids] = [svcid,buf,len,False,False,0,timeout]#send,ack_received
         if new_reqs == 1:
             sem.release()
+
+
     return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
 
