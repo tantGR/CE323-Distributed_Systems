@@ -25,6 +25,7 @@ def Receiver():
 	while True:
 		print('\nwaiting to receive message')
 		data, address = sock.recvfrom(1024)
+		print(address)
 		#print('received %s bytes from %s' % (len(data), address))
 
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
@@ -37,15 +38,12 @@ def Receiver():
 		elif key == 1997: #request
 			[svcid,ID,buf,len] = struct.unpack('!bQsb',data)
 			#send ack
-			sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-			sender.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-			message = struct.pack('!b',int("ACK"))
-			address = 
+			sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			message = struct.pack('!IQ',00000,ID) #ack 11111 reply
 			sent = sender.sendto(message,address)
 			reqs += 1
-			repls_dict[ID] = [buf,len] 
+			repls_dict[ID] = [buf,len,address] 
 			print("Request ",ID," arrived\n")
-
 		else:
 			continue
 	#	if len(data)==1 and data[0] == SVCID:#we sent only SVCID in discovery

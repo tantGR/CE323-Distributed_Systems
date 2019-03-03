@@ -28,9 +28,11 @@ new_reqs=0
 AT_MOST_N = 10000
 all_sents = 0
 repls_dict = {}
+my_addr = 0
 
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
+receiver_sem = threading.Semaphore(0)
 
 
 def ip2int(ip):
@@ -78,9 +80,14 @@ def next_req():
     return -1 
 
 def Requests():
-    global new_reqs, reqs_nack, all_sents
+    global new_reqs, reqs_nack, all_sents, my_addr
     server_addr = discover_servers()
+
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print()
+    #my_addr = socket.getnameinfo(socket.gethostbyname(socket.gethostname()),)
+    receiver_sem.release()
+    
 
 
     while True:
@@ -98,20 +105,36 @@ def Requests():
 
 
         if sent == True:   #received ack 
-            del reqs_dict[ids]         #isos lock
+            del reqs_dict[reqTosend]         #isos lock
         else:
             times_sent += 1
             timeout = TIMEOUT
             all_sents += 1      #sunolo apostolon (At most once)
-            uniqueID = int(str(reqTosend)+str(ip2int(socket.gethostbyname(socket.gethostname()))))
-            packet = struct.pack('!IbQsb',1997, svcid,uniqueID,buf,len)#type of buf 
+            packet = struct.pack('!IbQsb',1997, svcid,reqTosend,buf,len)#type of buf 
             reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout] # isos lock
             print("requests: ", reqs_dict)
             server.sendto(packet,server_addr)
+
+
+
             
 def Replies():
-    print("")
-    
+    receiver_sem.acquire()
+    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    #receiver.bind((socket.gethostbyname(socket.gethostname()),receiver.getsockname()[1]))
+   # print((socket.gethostbyname(socket.gethostname()),receiver.getsockname()[1]))
+
+    while True:
+        data, address = receiver.recvfrom(1024)
+        print(data)
+        (key,) = struct.unpack('!I', data[0:4])
+        data = data[4:]
+        if key == 00000: #ack
+            print("ack received")
+            id = struct.unpack('!Q',data)
+            with dict_lock:
+                reqs_dict[id][4] = True
+
 
 
 
@@ -152,19 +175,20 @@ def sendRequest(svcid, buf, len):
      #   return -1
     
     if threads_exist==0:
-        Req = MyThread(Requests, 1, "Requests")
-        Repl = MyThread(Replies, 2, "Replies")
+        Repl = MyThread(Replies, 1, "Replies")
+        Req = MyThread(Requests, 2, "Requests")
         Req.start()
         Repl.start()
         threads_exist = 1
 
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
+        uniqueID = int(str(ip2int(socket.gethostbyname(socket.gethostname()))) + str(ids))
         new_reqs += 1
-        reqs_dict[ids] = [svcid,buf,len,False,False,0,TIMEOUT]#send,ack_received
+        reqs_dict[uniqueID] = [svcid,buf,len,False,False,0,TIMEOUT]#send,ack_received
         if new_reqs == 1:
             sem.release()
-    return ids #isos to buf  prepei na einai se koini thesi sti mnimi
+    return uniqueID #isos to buf  prepei na einai se koini thesi sti mnimi
 
 
 def getReply(reqid, buf, len, block):
