@@ -28,7 +28,7 @@ def Receiver():
 		print('\nwaiting to receive message')
 		data, address = sock.recvfrom(1024)
 		#print('received %s bytes from %s' % (len(data), address))
-		
+
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 		#print("data received from are: "+str(len(data)))
 		data=data[4:]
 		if key == 1995:

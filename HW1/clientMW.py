@@ -24,6 +24,7 @@ Req = 0;Repl=0;ids=0
 timeout=1000
 reqs_nack=0
 new_reqs=0
+AT_MOST_N = 6
 
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
@@ -59,13 +60,20 @@ def discover_servers():
 def next_req():
     if ids == 0:
         return -1
-    for id in reqs_dict:
-        reqs_dict[id][6] -= 1#timeout
-        if reqs_dict[id][4] == 0:
-            return id
-        elif with_ack == False and reqs_dict[id][6] == 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries            return id 
-            return id
-    return -1
+
+    while True:    
+        for id in reqs_dict:
+            #reqs_dict[id]=[svcid,buf,len,with_ack,times_sent,timeout]
+            reqs_dict[id][5] -= 1#timeout
+            if reqs_dict[id][3]==True or reqs_dict[id][4]==AT_MOST_N or reqs_dict[id][5]==0:# if  with_ack==True or times_sent==0 or timeout==0:
+                return id,False
+            else:
+                return id,True
+            #if reqs_dict[id][4] == 0:
+            #    return id
+            #elif with_ack == False and reqs_dict[id][5] == 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries return id 
+            #    return id
+    return id,False
 
 def Requests():
     global new_reqs, reqs_nack
@@ -76,40 +84,46 @@ def Requests():
         if new_reqs == 0 and reqs_nack == 0:
             sem.acquire()
         with dict_lock: #LOCK AND UNLOCK IN THE END 
-            reqTosend = next_req()
-            if reqTosend == -1:
-                continue #or use a semaphore(or signal) to know when ther is a new req 
-            [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
+            #oi 4 parakatw grammes kanoun "katharismo" sto dict
+            reqTosend,keep_req = next_req()
+            while keep_req==False:
+                del reqs_dict[reqTosend]
+                reqTosend,keep_req = next_req()
+
+            #if reqTosend == -1:
+            #    continue #or use a semaphore(or signal) to know when ther is a new req
+            [svcid,buf,len,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
                 reqs_nack = reqs_nack + 1
                 if reqs_nack==1:
-                    recv_sem.acquire()  
+                    recv_sem.release()  
+
+
             #print("init returned:",reqTosend,"new_reqs=",new_reqs,"and reqs_nack=",reqs_nack,"\n")
             #unlock
-
-        if sent == True:
-            del reqs_dict[ids]
-        else:
+            #kanw delete pio prin
+            #if sent == True:
+            #    del reqs_dict[ids]
+        #else:
             times_sent += 1
-            packet = struct.pack('!IIbbsb',1997, reqTosend,svcid,reqTosend,buf,len)#type of buf "lakis"
-            reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
+            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
+            reqs_dict[reqTosend] = [svcid,buf,len,with_ack,times_sent,timeout]
             server.sendto(packet,server_addr)
             
 
 # allages: nomizw pws prepei o client na stelnei ston server torequest_id
 def Replies():
     global new_reqs, reqs_nack
-    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
+    listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     while True:
         if reqs_nack==0:
             recv_sem.acquire()
-        data, server = client.recvfrom(16)
-        [reqToAck,svcid,buf,len,sent,with_ack,times_sent,timeout] = struct.unpack('!IIbbsb',data)
-        sent=True
+        data, server = listener.recvfrom(16)
+        [reqToAck,svcid,buf,len,with_ack,times_sent,timeout] = struct.unpack('!IIbbsb',data)
+        with_ack=True
         with dict_lock:
-            reqs_dict[reqToAck] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
+            reqs_dict[reqToAck] = [svcid,buf,len,with_ack,times_sent,timeout]
             reqs_nack=reqs_nack-1
 
 
@@ -161,7 +175,7 @@ def sendRequest(svcid, buf, len):
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
         new_reqs += 1
-        reqs_dict[ids] = [svcid,buf,len,False,False,0,timeout]#send,ack_received
+        reqs_dict[ids] = [svcid,buf,len,False,0,timeout]#send,ack_received
         if new_reqs == 1:
             sem.release()
 
