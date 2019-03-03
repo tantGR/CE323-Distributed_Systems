@@ -20,7 +20,8 @@ def main():
 			res = mw.getReply(id,num,len,block)	
 		elif ans==3:
 			print("Goodbye!\n")
-			break        #kill threads
+			break        
+			#kill threads
 		
 
 if __name__ == "__main__":

@@ -8,16 +8,14 @@ server_address = ('',2019)
 Receiver = 0
 
 repls_dict = {}
+reqs_dict = {}
+reqs = 0
 
+def int2ip(ip):
+    return socket.inet_ntoa(struct.pack("!I",ip))
 
-	#afto gia kanonika paketa. Twra mono to discovery
-	#(svcid,sent_reqs,buf,len) = struct.unpack('!bbsb',data)#type of buf
-	#print("data received from "+address+" are: "+buf)
-
-	#print('sending acknowledgement to', address)
-	#sock.sendto(reply, address)
 def Receiver():
-
+	global reqs
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	group = socket.inet_aton(multicast_group)
 	mreq = struct.pack('4sL', group, socket.INADDR_ANY)
@@ -27,8 +25,10 @@ def Receiver():
 	while True:
 		print('\nwaiting to receive message')
 		data, address = sock.recvfrom(1024)
+		print(address)
 		#print('received %s bytes from %s' % (len(data), address))
 
+<<<<<<< HEAD
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 		#print("data received from are: "+str(len(data)))
 		data=data[4:]
 		if key == 1995:
@@ -38,6 +38,24 @@ def Receiver():
 		elif key == 1997:
 			[svcid,reqid,buf,len] = struct.unpack('!bbsb',data)
 			print("Request ",reqid," arrived!\n")
+=======
+		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
+		print (key)
+		data = data[4:]
+		if key == 1995: #discovery
+			message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
+			sent = sock.sendto(message,address)#reply to the Discover Request
+			print("You found me!\n")
+		elif key == 1997: #request
+			[svcid,ID,buf,len] = struct.unpack('!bQsb',data)
+			#send ack
+			sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+			message = struct.pack('!IQ',00000,ID) #ack 11111 reply
+			sent = sender.sendto(message,address)
+			reqs += 1
+			repls_dict[ID] = [buf,len,address] 
+			print("Request ",ID," arrived\n")
+>>>>>>> origin/master
 		else:
 			continue
 	#	if len(data)==1 and data[0] == SVCID:#we sent only SVCID in discovery
@@ -51,6 +69,7 @@ def Receiver():
 	#		reply = print("Not me!\n")
 
 #def Sender():
+#send reply
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):

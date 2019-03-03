@@ -1,6 +1,7 @@
 import math
 import random
 
+
 def simplePrimaryTest(number):
     if number == 2:
        return true

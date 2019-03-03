@@ -16,10 +16,11 @@ import struct
 import socket
 nlife=0;
 reqs_dict = {}
-MCAST_ADDR = "224.0.0.7"
+MCAST_ADDR = "224.0.0.7"    
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
+<<<<<<< HEAD
 Req = 0;Repl=0;ids=0
 timeout=1000
 reqs_nack=0
@@ -29,11 +30,33 @@ AT_MOST_N = 6
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
 recv_sem=threading.Semaphore(0)
+=======
+threads_exist = 0
+Req = -2;Repl=-2;ids=0
+TIMEOUT = 1000000
+reqs_nack=0
+new_reqs=0
+AT_MOST_N = 10000
+all_sents = 0
+repls_dict = {}
+my_addr = 0
+
+dict_lock = threading.Lock()
+sem=threading.Semaphore(0)
+receiver_sem = threading.Semaphore(0)
+
+>>>>>>> origin/master
+
+def ip2int(ip):
+    return struct.unpack("!I",socket.inet_aton(ip))[0]
+
+def int2ip(ip):
+    return socket.inet_ntoa(struct.pack("!I",ip))
 
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    #client.settimeout(3)https://wiki.python.org/moin/UdpCommunication
+    #client.settimeout(3)
 
     ttl = struct.pack('b', TTL)# ttl=1=local network segment.
     client.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
@@ -47,8 +70,8 @@ def discover_servers():
             try:
                 data, server = client.recvfrom(16)
             except socket.timeout:
-                print("timeout. No more responses\n")
-                break
+                print("No server found\n")
+                return -1
             else:
                 #print("received %s from %s" % (data, server) )
                 client.close()
@@ -58,8 +81,9 @@ def discover_servers():
         client.close()
 
 def next_req():
-    if ids == 0:
+    if ids == 0 or all_sents >= AT_MOST_N:
         return -1
+<<<<<<< HEAD
 
     while True:    
         for id in reqs_dict:
@@ -74,16 +98,32 @@ def next_req():
             #elif with_ack == False and reqs_dict[id][5] == 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries return id 
             #    return id
     return id,False
+=======
+    for id in reqs_dict:
+        reqs_dict[id][6] -= 1 #timeout
+        if reqs_dict[id][5] == 0:    #times_sent
+            return id
+        elif reqs_dict[id][4] == False and reqs_dict[id][6] <= 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries
+            return id
+    return -1 
+>>>>>>> origin/master
 
 def Requests():
-    global new_reqs, reqs_nack
+    global new_reqs, reqs_nack, all_sents, my_addr
     server_addr = discover_servers()
+
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    print()
+    #my_addr = socket.getnameinfo(socket.gethostbyname(socket.gethostname()),)
+    receiver_sem.release()
+    
+
 
     while True:
         if new_reqs == 0 and reqs_nack == 0:
             sem.acquire()
         with dict_lock: #LOCK AND UNLOCK IN THE END 
+<<<<<<< HEAD
             #oi 4 parakatw grammes kanoun "katharismo" sto dict
             reqTosend,keep_req = next_req()
             while keep_req==False:
@@ -109,9 +149,30 @@ def Requests():
             times_sent += 1
             packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
             reqs_dict[reqTosend] = [svcid,buf,len,with_ack,times_sent,timeout]
-            server.sendto(packet,server_addr)
-            
+=======
+            reqTosend = next_req()
+            if reqTosend == -1:
+                continue    #or use a semaphore(or signal) to know when ther is a new req 
+            [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
+            if times_sent == 0:
+                new_reqs -= 1
+                reqs_nack += 1
+            #unlock
 
+
+        if sent == True:   #received ack 
+            del reqs_dict[reqTosend]         #isos lock
+        else:
+            times_sent += 1
+            timeout = TIMEOUT
+            all_sents += 1      #sunolo apostolon (At most once)
+            packet = struct.pack('!IbQsb',1997, svcid,reqTosend,buf,len)#type of buf 
+            reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout] # isos lock
+            print("requests: ", reqs_dict)
+>>>>>>> origin/master
+            server.sendto(packet,server_addr)
+
+<<<<<<< HEAD
 # allages: nomizw pws prepei o client na stelnei ston server torequest_id
 def Replies():
     global new_reqs, reqs_nack
@@ -128,6 +189,30 @@ def Replies():
 
 
     return #print("replies\n")
+=======
+
+
+            
+def Replies():
+    receiver_sem.acquire()
+    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    #receiver.bind((socket.gethostbyname(socket.gethostname()),receiver.getsockname()[1]))
+   # print((socket.gethostbyname(socket.gethostname()),receiver.getsockname()[1]))
+
+    while True:
+        data, address = receiver.recvfrom(1024)
+        print(data)
+        (key,) = struct.unpack('!I', data[0:4])
+        data = data[4:]
+        if key == 00000: #ack
+            print("ack received")
+            id = struct.unpack('!Q',data)
+            with dict_lock:
+                reqs_dict[id][4] = True
+
+
+
+>>>>>>> origin/master
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -160,21 +245,23 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     return 0
 
 def sendRequest(svcid, buf, len):
-    global Req,Repl,ids,new_reqs
+    global Req,Repl,ids,new_reqs,threads_exist
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
     #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
-    #    return -1
-
+     #   return -1
     
-    if not(Req != 0 and Repl!=0 and Req.isAlive() and Repl.isAlive()):
-        Req = MyThread(Requests, 1, "Requests")
-        Repl = MyThread(Replies, 2, "Replies")
+    if threads_exist==0:
+        Repl = MyThread(Replies, 1, "Replies")
+        Req = MyThread(Requests, 2, "Requests")
         Req.start()
         Repl.start()
+        threads_exist = 1
 
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
+        uniqueID = int(str(ip2int(socket.gethostbyname(socket.gethostname()))) + str(ids))
         new_reqs += 1
+<<<<<<< HEAD
         reqs_dict[ids] = [svcid,buf,len,False,0,timeout]#send,ack_received
         if new_reqs == 1:
             sem.release()
@@ -182,7 +269,15 @@ def sendRequest(svcid, buf, len):
 
     return ids #isos to buf  prepei na einai se koini thesi sti mnimi
 
+=======
+        reqs_dict[uniqueID] = [svcid,buf,len,False,False,0,TIMEOUT]#send,ack_received
+        if new_reqs == 1:
+            sem.release()
+    return uniqueID #isos to buf  prepei na einai se koini thesi sti mnimi
+>>>>>>> origin/master
 
 
 def getReply(reqid, buf, len, block):
 	print("popa")
+
+# remember TODO errors check!!!
