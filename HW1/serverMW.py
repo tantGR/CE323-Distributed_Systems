@@ -28,17 +28,6 @@ def Receiver():
 		print(address)
 		#print('received %s bytes from %s' % (len(data), address))
 
-<<<<<<< HEAD
-		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 		#print("data received from are: "+str(len(data)))
-		data=data[4:]
-		if key == 1995:
-			message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
-			sent = sock.sendto(message,address)#reply to the Discover Request
-			print("You found me!\n")
-		elif key == 1997:
-			[svcid,reqid,buf,len] = struct.unpack('!bbsb',data)
-			print("Request ",reqid," arrived!\n")
-=======
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
 		print (key)
 		data = data[4:]
@@ -55,7 +44,6 @@ def Receiver():
 			reqs += 1
 			repls_dict[ID] = [buf,len,address] 
 			print("Request ",ID," arrived\n")
->>>>>>> origin/master
 		else:
 			continue
 	#	if len(data)==1 and data[0] == SVCID:#we sent only SVCID in discovery
