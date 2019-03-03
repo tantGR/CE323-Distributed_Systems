@@ -20,14 +20,24 @@ MCAST_ADDR = "224.0.0.7"
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
-Req = 0;Repl=0;ids=0
-TIMEOUT = 10  
+threads_exist = 0
+Req = -2;Repl=-2;ids=0
+TIMEOUT = 1000000
 reqs_nack=0
 new_reqs=0
+AT_MOST_N = 10000
+all_sents = 0
+repls_dict = {}
 
 dict_lock = threading.Lock()
 sem=threading.Semaphore(0)
 
+
+def ip2int(ip):
+    return struct.unpack("!I",socket.inet_aton(ip))[0]
+
+def int2ip(ip):
+    return socket.inet_ntoa(struct.pack("!I",ip))
 
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
@@ -57,18 +67,18 @@ def discover_servers():
         client.close()
 
 def next_req():
-    if ids == 0:
+    if ids == 0 or all_sents >= AT_MOST_N:
         return -1
     for id in reqs_dict:
         reqs_dict[id][6] -= 1 #timeout
-        if reqs_dict[id][4] == 0:    #times_sent
+        if reqs_dict[id][5] == 0:    #times_sent
             return id
-        elif with_ack == False and reqs_dict[id][6] <= 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries
+        elif reqs_dict[id][4] == False and reqs_dict[id][6] <= 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries
             return id
     return -1 
 
 def Requests():
-    global new_reqs, reqs_nack
+    global new_reqs, reqs_nack, all_sents
     server_addr = discover_servers()
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -79,7 +89,7 @@ def Requests():
         with dict_lock: #LOCK AND UNLOCK IN THE END 
             reqTosend = next_req()
             if reqTosend == -1:
-                continue #or use a semaphore(or signal) to know when ther is a new req 
+                continue    #or use a semaphore(or signal) to know when ther is a new req 
             [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
@@ -92,12 +102,18 @@ def Requests():
         else:
             times_sent += 1
             timeout = TIMEOUT
-            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf 
+            all_sents += 1      #sunolo apostolon (At most once)
+            uniqueID = int(str(reqTosend)+str(ip2int(socket.gethostbyname(socket.gethostname()))))
+            packet = struct.pack('!IbQsb',1997, svcid,uniqueID,buf,len)#type of buf 
             reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout] # isos lock
+            print("requests: ", reqs_dict)
             server.sendto(packet,server_addr)
             
 def Replies():
-	return #print("replies\n")
+    print("")
+    
+
+
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -130,16 +146,17 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     return 0
 
 def sendRequest(svcid, buf, len):
-    global Req,Repl,ids,new_reqs
+    global Req,Repl,ids,new_reqs,threads_exist
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
     #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
      #   return -1
     
-    if not(Req != 0 and Repl!=0 and Req.isAlive() and Repl.isAlive()):
+    if threads_exist==0:
         Req = MyThread(Requests, 1, "Requests")
         Repl = MyThread(Replies, 2, "Replies")
         Req.start()
         Repl.start()
+        threads_exist = 1
 
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1
