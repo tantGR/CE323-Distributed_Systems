@@ -16,7 +16,7 @@ import struct
 import socket
 nlife=0;
 reqs_dict = {}
-MCAST_ADDR = "224.0.0.7"
+MCAST_ADDR = "224.0.0.7"    
 MCAST_PORT = 2019
 SVCID = 50
 TTL = 1
@@ -63,7 +63,7 @@ def next_req():
         reqs_dict[id][6] -= 1 #timeout
         if reqs_dict[id][4] == 0:    #times_sent
             return id
-        elif with_ack == False and reqs_dict[id][6] == 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries
+        elif with_ack == False and reqs_dict[id][6] <= 0 and new_reqs==0: #and timeout kai an den iparxoun kainoyries
             return id
     return -1 
 
@@ -83,16 +83,17 @@ def Requests():
             [svcid,buf,len,sent,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 new_reqs -= 1
+                reqs_nack += 1
             #unlock
 
 
-        if sent == True:
-            del reqs_dict[ids]
+        if sent == True:   #received ack 
+            del reqs_dict[ids]         #isos lock
         else:
             times_sent += 1
             timeout = TIMEOUT
-            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf "lakis"
-            reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout]
+            packet = struct.pack('!Ibbsb',1997, svcid,reqTosend,buf,len)#type of buf 
+            reqs_dict[reqTosend] = [svcid,buf,len,sent,with_ack,times_sent,timeout] # isos lock
             server.sendto(packet,server_addr)
             
 def Replies():
