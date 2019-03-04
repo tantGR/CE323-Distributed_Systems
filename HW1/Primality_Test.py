@@ -4,7 +4,7 @@ import random
 
 def simplePrimaryTest(number):
     if number == 2:
-       return true
+       return True
     if number % 2 == 0:
         return False
     
