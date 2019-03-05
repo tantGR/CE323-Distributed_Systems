@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-##### allages poy ekana ####
-# 0) sxolia se merika simeia
-# 1) evgala to server_connected apo global se local variable
-# 2) an connected, to vala = 1
-# 3) stin 67, allaksa tin seira tou sent++. Prepei apo miden na ksekina
-# 4) stin 47(next_req() ), prepei na xoume ena while(1).Episis prepei na kratame mia
-# static metavliti, wste na nai dikaio to search sto dictionary 
-# 5) an times_sent > MAX_TIMEOUT, tote, del[reqid]
-# 6) sto pack() to format einai sigoura swsto?!
-# 7) prosthiki semaphores
 import threading
 import struct
 import socket
 import os
+import signal
+import sys
+
 nlife=0;
 reqs_dict = {}
 MCAST_ADDR = "224.0.0.7"    
@@ -86,8 +78,6 @@ def Requests():
     #my_addr = socket.getnameinfo(socket.gethostbyname(socket.gethostname()),)
     receiver_sem.release()
     
-
-
     while True:
         if new_reqs == 0 and reqs_nack == 0:
             sem.acquire()
@@ -204,6 +194,12 @@ def getReply(reqid,block):
             (buf,len) = repls_dict[reqid]
 
     return buf,len 
+
+def handler(sig,frame):
+    sys.exit(0)
+    return
+
+signal.signal(signal.SIGINT,handler)
 
 # remember TODO errors check!!!
 #error check in app layer
