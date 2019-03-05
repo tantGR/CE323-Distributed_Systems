@@ -111,7 +111,7 @@ def Requests():
 
             
 def Replies():
-    global myclient
+    global myclient, reqs_nack
     receiver_sem.acquire()
 
     while True:
@@ -168,12 +168,15 @@ def sendRequest(svcid, buf, len):
     global Req,Repl,ids,new_reqs,threads_exist,myclient
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
     #if (saveInRequestFile(reqid,svcid,buf,len,nlife)==-1):
+ 
      #   return -1
     
     if threads_exist==0:
         myclient = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        Repl = MyThread(Replies, 1, "Replies")
+        Repl = MyThread(Replies, 1, "Replies")#, threading.get_ident())#gia python2=threading.current_thread()
         Req = MyThread(Requests, 2, "Requests")
+        Req.setDaemon(True)
+        Repl.setDaemon(True)
         Req.start()
         Repl.start()
         threads_exist = 1
