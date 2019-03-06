@@ -1,6 +1,6 @@
 import clientMW as mw 
 import struct
-svcid = 5 
+svcid = 50 
 requests = {}
 
 def main():
