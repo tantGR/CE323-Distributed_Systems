@@ -19,7 +19,8 @@ def main():
 		reqid,buf,len = mw.getRequest(SVCID)
 		#print(type(buf)," , ", len(buf))
 		if reqid == -1:
-			print("No requests available.\n")
+			pass
+			#print("No requests available.\n")
 		else:	
 			print("Serving: ",reqid)
 			#number = struct.unpack('i',buf)
@@ -32,7 +33,7 @@ def main():
 			print(result)
 			res = struct.pack('?',result)
 			mw.sendReply(reqid,res,1)
-		time.sleep(5)
+		#time.sleep(5)
 
 if __name__ == "__main__":
 	main()

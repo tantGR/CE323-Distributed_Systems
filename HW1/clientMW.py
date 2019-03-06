@@ -50,7 +50,7 @@ def discover_servers():
                 sent = client.sendto(message, multicast_group)
                 data, server = client.recvfrom(16)
             except socket.timeout:
-                print("No server found\n")
+                pass#print("No server found\n")
                 #return -1
             else:
                 #print("received %s from %s" % (data, server) )
@@ -80,16 +80,18 @@ def Requests():
     
     while True:
         with shared_vars:
-            if new_reqs == 0 and reqs_nack ==0 and lost_packets > AT_MOST_N + 1:
+            if new_reqs == 0 and reqs_nack ==0:# and lost_packets > AT_MOST_N + 1:
                 #print("Before...")
                 sem.acquire()
                 #print("...After")
         #print("lalis1")
         with dict_lock: 
-            reqTosend = next_req()
-            #print("reqid:",reqTosend,",new_reqs:",new_reqs,",unACKed:",reqs_nack,"dictSize:",ids)
+            reqTosend = next_req()            
             if reqTosend == -1:
                 continue    #or use a semaphore(or signal) to know when ther is a new req 
+            else:
+                print("reqid:",reqTosend,",new_reqs:",new_reqs,",unACKed:",reqs_nack,",dictSize:",ids)
+
             [svcid,buf,len,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
                 with shared_vars:
@@ -101,7 +103,7 @@ def Requests():
         timeout = TIMEOUT
         with shared_vars:
             lost_packets += 1      #sunolo apostolon (At most once)
-            print("Lost: ",lost_packets)
+            #print("Lost: ",lost_packets)
             if lost_packets > AT_MOST_N:
                 print("server down")
                 lost_packets = 0
@@ -128,17 +130,18 @@ def Replies():
         if key == 00000: #ack
             (id,) = struct.unpack('!Q',data)
             with dict_lock:
-                print(id)
+                #print(id)
                 reqs_dict[id][3] = True
                 with shared_vars:
                     reqs_nack -= 1
-                print("ack received")
+                #print("ACK received")
         elif key == 11111:  #reply
             with shared_vars:
                 lost_packets -= 1
-            print("Reply received.")
+            #print("Result received.")
             id,buf,len = struct.unpack('!Qsb',data)
             with dict_lock:
+                print("deleting req:",id)
                 del reqs_dict[id]
             repls_dict[id] = [buf,len] #dictionary me tis apantiseis pou irthan
             blocking_sem.release()
@@ -198,7 +201,7 @@ def sendRequest(svcid, buf, len):
         uniqueID = int(str(ip2int(socket.gethostbyname(socket.gethostname()))) + str(os.getpid())  + str(ids))
         reqs_dict[uniqueID] = [svcid,buf,len,False,0,TIMEOUT]#send,ack_received
         if new_reqs == 0:
-            print("Hello")
+            #print("Hello")
             sem.release()
         with shared_vars:
             new_reqs += 1
@@ -211,13 +214,13 @@ def getReply(reqid,block):
         return 1,buf,len    
     else:
         if block == False:
-            return -1 #no reply available
+            return -1,-1,-1 #no reply available
         else:
             while reqid not in repls_dict:    #isos, alla oxi poli kalo
                 blocking_sem.acquire()
             (buf,len) = repls_dict[reqid]
 
-    return buf,len 
+    return 1,buf,len 
 
 def handler(sig,frame):
     sys.exit(0)

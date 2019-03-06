@@ -10,7 +10,7 @@ def main():
 		if ans==1:
 			num = int(input("Give an number: "))
 			buf = num
-			print("!",buf,"!")
+			#print("!",buf,"!")
 			#buf = struct.pack('i',num)
 			id = mw.sendRequest(svcid,buf,0)#len(buf)
 			requests[num] = id

@@ -12,6 +12,7 @@ repls_dict = {}
 reqs_dict = {}
 reqs = 0
 new_repls = threading.Semaphore(0)
+dict_lock = threading.Lock()
 
 
 def int2ip(ip):
@@ -46,8 +47,9 @@ def Receiver():
 			message = struct.pack('!IQ',00000,ID) #ack 11111 reply
 			sent = sender.sendto(message,address)
 			reqs += 1
-			reqs_dict[ID] = [buf,len,address,False]# [buf,len,client_address,served] 
-			print("Request ",ID," arrived\n")
+			with dict_lock: 
+				reqs_dict[ID] = [buf,len,address,False]# [buf,len,client_address,served] 
+				print("Request ",ID," arrived\n")
 		else:
 			continue
 
@@ -93,12 +95,13 @@ def getRequest(svcid):
 	if reqs == 0:
 		return -1,-1,-1
 	else:
-		for id in reqs_dict:
-			if reqs_dict[id][3] == False:
-				reqs_dict[id][3] = True
-				buf = reqs_dict[id][0]
-				len = reqs_dict[id][1]
-				return id,buf,len
+		with dict_lock: 
+			for id in reqs_dict:
+				if reqs_dict[id][3] == False:
+					reqs_dict[id][3] = True
+					buf = reqs_dict[id][0]
+					len = reqs_dict[id][1]
+					return id,buf,len
 	return -1,-1,-1
 
 def sendReply(reqid,buf,len):
