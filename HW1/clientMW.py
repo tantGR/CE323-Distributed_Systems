@@ -33,6 +33,7 @@ def ip2int(ip):
 def int2ip(ip):
     return socket.inet_ntoa(struct.pack("!I",ip))
 
+
 def discover_servers():
     multicast_group = (MCAST_ADDR, MCAST_PORT)
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -50,7 +51,7 @@ def discover_servers():
                 sent = client.sendto(message, multicast_group)
                 data, server = client.recvfrom(16)
             except socket.timeout:
-                pass#print("No server found\n")
+                print("No server found\n")
                 #return -1
             else:
                 #print("received %s from %s" % (data, server) )
@@ -90,7 +91,7 @@ def Requests():
             if reqTosend == -1:
                 continue    #or use a semaphore(or signal) to know when ther is a new req 
             else:
-                print("reqid:",reqTosend,",new_reqs:",new_reqs,",unACKed:",reqs_nack,",dictSize:",ids)
+                print("new_reqs:",new_reqs,",unACKed:",reqs_nack,",dictSize:",ids)
 
             [svcid,buf,len,with_ack,times_sent,timeout] = reqs_dict[reqTosend]
             if times_sent == 0:
@@ -115,7 +116,7 @@ def Requests():
                         reqs_dict[id][5] = TIMEOUT
                         server_addr = discover_servers()
                 continue
-        packet = struct.pack('!IbQib',1997, svcid,reqTosend,buf,len)#type of buf
+        packet = struct.pack('!IbQQb',1997, svcid,reqTosend,buf,len)#type of buf
         reqs_dict[reqTosend] = [svcid,buf,len,with_ack,times_sent,timeout] # isos lock
         myclient.sendto(packet,server_addr)
             
@@ -178,6 +179,32 @@ def saveInRequestFile(reqid,svcid,buf,len,nlife):
     f.close()
     return 0
 
+def updateLifeNumClient():
+	global lifeNum
+	file= r'client_life_num.txt'
+	if os.path.exists(file):
+		try:
+			with open(file, 'r+') as f:
+				lifeNum=int(f.readline())
+				f.truncate(0)#set curson
+				f.seek(0,0) 
+				f.write(str(lifeNum+1)+'\n')
+		except IOError:
+			print("Error writing at File.Exiting\n")
+			return -1
+	else:
+		try:
+			with open(file, 'w') as f:
+				lifeNum = 0
+				f.write(str(0)+'\n')
+		except IOError:
+			print("Error initializing File.Exiting\n")
+			return -1
+
+	f.close()
+	return 0
+
+
 def sendRequest(svcid, buf, len):
     global Req,Repl,ids,new_reqs,threads_exist,myclient,SVCID
     #Apothikefsi tou Request sto arxeio. Eggrafes tis morfis(reqid,svcid,buf,len,nlife)
@@ -186,15 +213,17 @@ def sendRequest(svcid, buf, len):
      #   return -1
     
     if threads_exist==0:
-        myclient = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        Repl = MyThread(Replies, 1, "Replies")#, threading.get_ident())#gia python2=threading.current_thread()
-        Req = MyThread(Requests, 2, "Requests")
-        Req.setDaemon(True)
-        Repl.setDaemon(True)
-        Req.start()
-        Repl.start()
-        threads_exist = 1
-        SVCID = svcid
+    	#if updateLifeNumClient() == -1:
+    	#	return -1
+    	myclient = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    	Repl = MyThread(Replies, 1, "Replies")#, threading.get_ident())#gia python2=threading.current_thread()
+    	Req = MyThread(Requests, 2, "Requests")
+    	Req.setDaemon(True)
+    	Repl.setDaemon(True)
+    	Req.start()
+    	Repl.start()
+    	threads_exist = 1
+    	SVCID = svcid
 
     with dict_lock:    #LOCK AND UNLOCK IN THE END
         ids += 1

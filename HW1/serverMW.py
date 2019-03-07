@@ -2,6 +2,7 @@ import socket
 import struct 
 import sys
 import threading
+import time
 
 multicast_group = "224.0.0.7"
 server_address = ('',2019)  
@@ -18,6 +19,8 @@ dict_lock = threading.Lock()
 def int2ip(ip):
     return socket.inet_ntoa(struct.pack("!I",ip))
 
+
+
 def Receiver():
 	global reqs
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -29,7 +32,7 @@ def Receiver():
 	while True:
 		print('\nwaiting to receive message')
 		data, address = sock.recvfrom(1024)
-		print(address)
+		#print(address)
 		#print('received %s bytes from %s' % (len(data), address))
 
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
@@ -39,8 +42,8 @@ def Receiver():
 			message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
 			sent = sock.sendto(message,address)#reply to the Discover Request
 			print("You found me!\n")
-		elif key == 1997: #request
-			[svcid,ID,buf,len] = struct.unpack('!bQib',data)
+		elif key == 1997: #request, send ACK
+			[svcid,ID,buf,len] = struct.unpack('!bQQb',data)
 			#print("buffer: ",type(buf))
 			#send ack
 			sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -56,7 +59,7 @@ def Receiver():
 def Sender():
 	sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 	while True:
-		new_repls.acquire()
+		new_repls.acquire()		
 		for id in repls_dict:
 			if repls_dict[id][2] == False:
 				buf,len,sent = repls_dict[id]
@@ -89,8 +92,9 @@ def register(svcid):
 	Rcv.start()
 
 	return 1 
-#def unregister(svcid):
 
+	
+#def unregister(svcid):
 def getRequest(svcid):
 	if reqs == 0:
 		return -1,-1,-1
