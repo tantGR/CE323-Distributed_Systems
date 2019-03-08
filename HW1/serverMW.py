@@ -2,6 +2,7 @@ import socket
 import struct 
 import sys
 import threading
+import os
 
 multicast_group = "224.0.0.7"
 server_address = ('',2019)  
@@ -13,9 +14,14 @@ reqs_dict = {}
 reqs = 0
 new_repls = threading.Semaphore(0)
 
-
-def int2ip(ip):
-    return socket.inet_ntoa(struct.pack("!I",ip))
+def ErrorinClient(addr):
+	(client,_) = addr
+	print(client)
+	response = os.system("ping -c 1 " + client + " > /dev/null")
+	if response == 0:
+		return 1
+	else:  	
+		return 0
 
 def Receiver():
 	global reqs
@@ -39,7 +45,7 @@ def Receiver():
 			sent = sock.sendto(message,address)#reply to the Discover Request
 			print("You found me!\n")
 		elif key == 1997: #request
-			[svcid,ID,buf,len] = struct.unpack('!bQib',data)
+			[svcid,ID,buf,len] = struct.unpack('!bQQb',data)
 			#print("buffer: ",type(buf))
 			#send ack
 			sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -59,8 +65,11 @@ def Sender():
 			if repls_dict[id][2] == False:
 				buf,len,sent = repls_dict[id]
 				repls_dict[id][2] = True
-				message = struct.pack('!IQsb',11111,id,buf,len)
-				sender.sendto(message,reqs_dict[id][2])			
+				if ErrorinClient(reqs_dict[id][2]) == 1:
+					message = struct.pack('!IQsb',11111,id,buf,len)
+					sender.sendto(message,reqs_dict[id][2])
+				else:
+					print("Client Error")			
 
 
 class MyThread(threading.Thread):
@@ -75,16 +84,20 @@ class MyThread(threading.Thread):
 
 def register(svcid):
 	global Rcv,Snd
-	#sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	#group = socket.inet_aton(multicast_group)
-	#mreq = struct.pack('4sL', group, socket.INADDR_ANY)
-	#sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-	#sock.bind(server_address)
 
-	Snd = MyThread(Sender,1,"Sender")
-	Rcv = MyThread(Receiver,2,"Receiver")
+	masterFound = Discover_Servers()
+#	if masterFound == 1:
+	#	Snd = MyThread(Sender,1,"Sender")
+	#	Rcv = MyThread(Receiver,2,"Receiver")
+	#	Snd.start()
+	#	Rcv.start()
+	#else:
+	Snd = MyThread(Master_Sender,1,"Sender")
+	Rcv = MyThread(Master_Receiver,2,"Receiver")
 	Snd.start()
 	Rcv.start()
+
+	
 
 	return 1 
 #def unregister(svcid):
