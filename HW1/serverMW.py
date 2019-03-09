@@ -17,7 +17,7 @@ reply_lock=threading.Lock()
 svcid=50
 
 def discover_master():
-	global myserver
+	global myserver, master_address
 	TTL = 1
 	multicast_group = ("224.0.0.7", 2019)
 	#client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -31,6 +31,7 @@ def discover_master():
 			try:
 				sent = myserver.sendto(message, multicast_group)
 				data, server = myserver.recvfrom(16)
+				master_address=server
 			except socket.timeout:
 				print("No server found\n")
 				#return -1
@@ -48,6 +49,16 @@ def ip2int(ip):
 def int2ip(ip):
     return socket.inet_ntoa(struct.pack("!I",ip))
 
+def calculateLoad(buf):
+	#isws thelei sundiasmo megethous arithmou kai arithmou requests stin apothiki
+	if buf%2 == 0:
+		return 1
+	else:
+		count = 0
+		while (buf > 0):
+			buf = buf//10.
+			count = count + 1.
+	return int(count)
 
 
 def Receiver():
@@ -69,7 +80,7 @@ def Receiver():
 			continue
 
 def Sender():
-	global new_repls,repls_dict,myserver,reply_lock
+	global new_repls,repls_dict,myserver,reply_lock, master_address
 
 	#repls_dict[reqid] = [address,port,buf,len,False]
 	while True:
@@ -79,11 +90,17 @@ def Sender():
 		found=False
 		with reply_lock:
 			for id in repls_dict:
-				if repls_dict[id][4] == False:
-					[address,port,buf,len,status] = repls_dict[id]
-					repls_dict[id][4] = True
+				if repls_dict[id][5] == False:
+					[address,port,buf,len,load,status] = repls_dict[id]
+					repls_dict[id][5] = True
+					#send result to client
+					print("ola ok")
 					message = struct.pack('!IQsb',11111,id,buf,len)
 					myserver.sendto(message,(address,port))
+
+					#send ack to master
+					message=struct.pack('!IQ',2001,load)
+					myserver.sendto(message,master_address)
 					found=True
 					break
 			if id != -1 and found == True:
@@ -138,9 +155,11 @@ def sendReply(reqid,buf,len):
 	global repls_dict,new_repls,dict_lock,reply_lock
 	#overwrite some data before releasing
 
-	[address,port,_,_,_]=reqs_dict[reqid]
+	#reqs_dict[ID] = [address,port,buf,len,False]
+	[address,port,num,_,_]=reqs_dict[reqid]
+	load=calculateLoad(num)
 	with reply_lock:
-		repls_dict[reqid] = [address,port,buf,len,False]
+		repls_dict[reqid] = [address,port,buf,len,load,False]
 
 
 	new_repls.release()

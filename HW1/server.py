@@ -7,7 +7,6 @@ SVCID = 50
 buf = 0
 len = 0 
 
-SVCID = 50
 
 def main():
 
@@ -17,7 +16,6 @@ def main():
 		return
 	while True:
 		reqid,buf,len = mw.getRequest(SVCID)
-		#print(type(buf)," , ", len(buf))
 		if reqid == -1:
 			pass
 			#print("No requests available.\n")
