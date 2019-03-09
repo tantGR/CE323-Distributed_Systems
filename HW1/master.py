@@ -21,7 +21,7 @@ def calculateLoad(buf):
 		while (buf > 0):
 			buf = buf//10.
 			count = count + 1.
-	return count
+	return int(count)
 	
 
 	
@@ -42,11 +42,12 @@ def main():
 	curr_slaves = 0
 	numOfSlaves=0
 	slaves=[]
-	MAX_LOAD=200
+	MAX_LOAD=10
 	while True:
 		(data, (address,port)) = sock.recvfrom(1024)
 		(key,) = struct.unpack('!I', data[0:4])#data is a tuple 
 		#data = data[4:]
+		print("Current Load: ",curr_load,".Num of slaves running: ",curr_slaves)
 		if key == 1995 : #discovery-client
 			if numOfSlaves > 0:
 				message = struct.pack('!b',1)#Server respondes true/false, depending if it is going to serve
@@ -60,6 +61,7 @@ def main():
 			curr_load = curr_load + calculateLoad(buf)
 			if curr_load > curr_slaves*MAX_LOAD:#energopoihse slave
 				curr_slaves = curr_slaves+1
+
 
 			message = struct.pack('!IQIbQQb',key, ip2int(address),port,SVCID,reqTosend,buf,len)
 			sent = sock.sendto(message,slaves[curr_slaves-1])#Forward to Slave

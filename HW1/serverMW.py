@@ -94,7 +94,6 @@ def Sender():
 					[address,port,buf,len,load,status] = repls_dict[id]
 					repls_dict[id][5] = True
 					#send result to client
-					print("ola ok")
 					message = struct.pack('!IQsb',11111,id,buf,len)
 					myserver.sendto(message,(address,port))
 
