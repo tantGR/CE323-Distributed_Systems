@@ -22,15 +22,17 @@ def main():
 			pass
 			#print("No requests available.\n")
 		else:	
-			print("Serving: ",reqid)
+			#print("Serving: ",reqid)
 			#number = struct.unpack('i',buf)
 			#print(number)
 			#number = int(number)
 			#number = int.from_bytes(buf,byteorder = 'little')
 			number = buf
-			print(number)
+			#print(number)
 			result = lib.simplePrimaryTest(number)
-			print(result)
+			print("number ",number, " is prime: ",result)
+			
+			#res=result
 			res = struct.pack('?',result)
 			mw.sendReply(reqid,res,1)
 		#time.sleep(5)

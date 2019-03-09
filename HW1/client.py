@@ -1,6 +1,7 @@
 import clientMW as mw 
 import struct
-svcid = 50 
+import sys
+svcid = 50
 requests = {}
 
 def main():
@@ -9,22 +10,26 @@ def main():
 		ans = int(input("What to do next?\n(1) to give a new number/(2) to get an answer/(3) to exit: "))
 		if ans==1:
 			num = int(input("Give an number: "))
-			buf = num
+			#string = str(num)
 			#print("!",buf,"!")
 			#buf = struct.pack('i',num)
-			id = mw.sendRequest(svcid,buf,0)#len(buf)
+			#length = sys.getsizeof(string)
+			#print(length)
+			#buf = string.encode()
+			id = mw.sendRequest(svcid,num,0)#len(buf)
 			requests[num] = id
 		elif ans==2:
 			num = int(input("For which nunber? "))
 			if num not in requests:
 				print("I cant find this number in your requests!")
 				continue
-			blk = input("Do you want to wait until I have the answer?(y/n) ")
-			if blk=='y':
+			blk = input("Do you want to wait until I have the answer?(1 for yes, 0 for no) ")
+			if blk==1:
 				block = True
 			else:
-				block = False	
-			ok,buf,len = mw.getReply(requests[num],block)
+				block = False
+			id = requests[num]
+			ok,buf,len = mw.getReply(id,block)
 			if ok == -1:
 				print("No reply available yet.")
 			else:
