@@ -7,7 +7,6 @@ SVCID = 50
 buf = 0
 len = 0 
 
-SVCID = 50
 
 def main():
 
@@ -17,22 +16,24 @@ def main():
 		return
 	while True:
 		reqid,buf,len = mw.getRequest(SVCID)
-		#print(type(buf)," , ", len(buf))
 		if reqid == -1:
-			print("No requests available.\n")
+			pass
+			#print("No requests available.\n")
 		else:	
-			print("Serving: ",reqid)
+			#print("Serving: ",reqid)
 			#number = struct.unpack('i',buf)
 			#print(number)
 			#number = int(number)
 			#number = int.from_bytes(buf,byteorder = 'little')
 			number = buf
-			print(number)
+			#print(number)
 			result = lib.simplePrimaryTest(number)
-			print(result)
+			print("number ",number, " is prime: ",result)
+			
+			#res=result
 			res = struct.pack('?',result)
 			mw.sendReply(reqid,res,1)
-		time.sleep(5)
+		time.sleep(2)
 
 if __name__ == "__main__":
 	main()
