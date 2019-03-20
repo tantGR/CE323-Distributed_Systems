@@ -74,18 +74,17 @@ def joinToGroup(grpname,addr,port,memberid):
 		ack_msg = struct.pack('!II',1,grp_port)#1 = group members		
 		return ack_msg
 
-def leaveGroup(grpname,memberid):
+def leaveGroup(grpid,memberid):
 	global LEAVE
-	id = groups_names[grpname]
-	numofmembers = len(groups_dict[id]) - 1
+	numofmembers = len(groups_dict[grpid]) - 1
 
 	if numofmembers == 0:
 		#del groups_dict[id][memberid]
-		del groups_dict[id]
-		del groups_names[grpname]
+		del groups_dict[grpid]
+		#del groups_names[grpname]# problem , delete name!!!!!!!!
 	else:
-		informGroupMembers(id,memberid,LEAVE)
-		del groups_dict[id][memberid]
+		#informGroupMembers(id,memberid,LEAVE)
+		del groups_dict[grpid][memberid]
 		
 	ack_msg = struct.pack('!b',1)
 	return ack_msg		

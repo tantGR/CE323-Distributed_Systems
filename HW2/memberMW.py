@@ -2,15 +2,18 @@ import socket
 import struct
 import os
 import threading
-
+import time
 MANAGER_TCP_PORT = 0
 TCP_PORT = 0
 #grp_members = 0
 members_dict = {}
+manager = 0
 JOIN = 6
 LEAVE = 9
+MY_ID = 0
 
 def discoverManager(addr,port):
+	global manager
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 	sock.settimeout(3)
 	TTL = 1
@@ -47,7 +50,9 @@ class MyThread(threading.Thread):
 
 
 def grp_join(name,addr,port,myid):
-	global JOIN, LEAVE,members_dict
+	global JOIN, LEAVE,members_dict, manager,MY_ID
+
+	MY_ID = myid
 
 	manager = discoverManager(addr,port)
 
@@ -77,14 +82,27 @@ def grp_join(name,addr,port,myid):
 
 	return grp_port
 
-#def grp_leave(int gsock)
+def grp_leave(gsock):
+	global members_dict, manager, MY_ID
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.connect(manager)
+
+	message = struct.pack('!III',LEAVE,gsock,MY_ID)
+	sock.send(message)
+	sock.recv(1024)
+	members_dict[gsock].remove(MY_ID)
 
 #def grp_send(int gsock,void *msg, int len)
 
 #def grp_recv(int gsock,int *type, void *msg,int *len, int block)
 
 grp = grp_join(1,"224.0.0.7",2019,os.getpid())
-
 print("[",os.getpid(),"] "," In group 1")
+for m in members_dict:
+	print(members_dict[m])
+
+time.sleep(3)
+print("Leaving")
+grp_leave(grp)
 for m in members_dict:
 	print(members_dict[m])
