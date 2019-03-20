@@ -7,6 +7,8 @@ MANAGER_TCP_PORT = 0
 TCP_PORT = 0
 #grp_members = 0
 members_dict = {}
+JOIN = 6
+LEAVE = 9
 
 def discoverManager(addr,port):
 	sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -45,12 +47,13 @@ class MyThread(threading.Thread):
 
 
 def grp_join(name,addr,port,myid):
+	global JOIN, LEAVE,members_dict
 
 	manager = discoverManager(addr,port)
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect(manager)
-	message = struct.pack('!III',name,TCP_PORT,myid)
+	message = struct.pack('!IIII',JOIN,name,TCP_PORT,myid)
 	sock.send(message)
 	data = sock.recv(1024)# ack from manager
 	(grp_members,) = struct.unpack('!I',data[0:4])
@@ -60,9 +63,11 @@ def grp_join(name,addr,port,myid):
 		return -1
 	elif grp_members ==  1:
 		(grp_port,) = struct.unpack('!I',data)
-		members_dict[grp_port] = []  # or [myid]
+		print(grp_port)
+		members_dict[grp_port] = [myid]  # or [myid]
 	else:
 		(grp_port,) = struct.unpack('!I',data[0:4])
+		print(grp_port)
 		data = data[4:]
 		members_dict[grp_port] = []
 		for i in range(grp_members):
@@ -81,3 +86,5 @@ def grp_join(name,addr,port,myid):
 grp = grp_join(1,"224.0.0.7",2019,os.getpid())
 
 print("[",os.getpid(),"] "," In group 1")
+for m in members_dict:
+	print(members_dict[m])

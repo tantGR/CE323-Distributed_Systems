@@ -28,7 +28,7 @@ def UdpDiscover():
 		manager.sendto(message,addr)
 
 def informGroupMembers(grpid,memberid,action):
-	global groups_dict
+	global groups_dict, JOIN, LEAVE
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 	if action == JOIN:
@@ -49,31 +49,33 @@ def ackTonewmember(grpid):
 
 	ackmsg = struct.pack('!II',numofmembers,grpid)#grpid= mltcast port for group
 	for member in groups_dict[grpid]:
-		ackmsg += struct.pack('I', member)
+		ackmsg += struct.pack('!I', member)
 
 	return ackmsg
 
-def joinToGroup(grpid,addr,port,memberid):
-	global groups_dict, groups_names, GROUPS_PORTS
+def joinToGroup(grpname,addr,port,memberid):
+	global groups_dict, groups_names, GROUPS_PORTS,JOIN
 
-	if grpid in groups_names:
+	if grpname in groups_names:
+		grpid = groups_names[grpname]
 		if memberid in groups_dict[grpid]:
 			ack_msg = struct.pack('!I',-1)# id iparxei, vres allo		+
 			return ack_msg
 		else:
-			informGroupMembers(groups_names[grpid],memberid,JOIN) #inform other members, receive acks
-			groups_dict[groups_names[grpid]][memberid] = (addr,port)
-			ack_msg = ackTonewmember(groups_names[grpid]) #return ack to new member
+			#informGroupMembers(grpid,memberid,JOIN) #inform other members, receive acks
+			groups_dict[grpid][memberid] = (addr,port)
+			ack_msg = ackTonewmember(grpid) #return ack to new member
 			return ack_msg
 	else:
 		grp_port = GROUPS_PORTS + 5
-		groups_names[grpid] = grp_port
+		groups_names[grpname] = grp_port
 		groups_dict[grp_port] = {}
 		groups_dict[grp_port][memberid] = (addr,port) #member's address
 		ack_msg = struct.pack('!II',1,grp_port)#1 = group members		
 		return ack_msg
 
 def leaveGroup(grpname,memberid):
+	global LEAVE
 	id = groups_names[grpname]
 	numofmembers = len(groups_dict[id]) - 1
 
@@ -92,7 +94,7 @@ def int2ip(ip):
     return socket.inet_ntoa(struct.pack("!I",ip))
 
 def TcpCommunication():
-	global TCP_PORT
+	global TCP_PORT,JOIN,LEAVE
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.settimeout(5)
 	sock.bind(('',TCP_PORT))
