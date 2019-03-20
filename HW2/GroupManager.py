@@ -1,5 +1,6 @@
 import socket
 import struct
+import threading
 
 multicast_ip = "224.0.0.7"
 multicast_addr = ('',2019)
@@ -7,7 +8,6 @@ TCP_PORT = 2018
 groups_dict = {} #leksiko me groups -> leksiko me tuples ton members
 groups_names = {} #antistoixisi group_port me group_name 
 GROUPS_PORTS = 10000 # port gia kathe group
-WELCOME = 10
 JOIN = 6
 LEAVE = 9
 
@@ -19,10 +19,12 @@ def UdpDiscover():
 	manager.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,mreq)
 	manager.bind(multicast_addr)
 
+	print(multicast_addr)
 	while True:
 		(data, addr) = manager.recvfrom(1024)
+		print("Found")
 
-		message = struct.pack('!b',1)
+		message = struct.pack('!I',TCP_PORT)
 		manager.sendto(message,addr)
 
 def informGroupMembers(grpid,memberid,action):
@@ -45,7 +47,7 @@ def informGroupMembers(grpid,memberid,action):
 def ackTonewmember(grpid):
 	numofmembers = len(groups_dict[grpid])
 
-	ackmsg = struct.pack('!III',WELCOME,numofmembers,grpid)#grpid= mltcast port for group
+	ackmsg = struct.pack('!II',numofmembers,grpid)#grpid= mltcast port for group
 	for member in groups_dict[grpid]:
 		ackmsg += struct.pack('I', member)
 
@@ -79,7 +81,7 @@ def leaveGroup(grpname,memberid):
 		#del groups_dict[id][memberid]
 		del groups_dict[id]
 		del groups_names[grpname]
-	elif:
+	else:
 		informGroupMembers(id,memberid,LEAVE)
 		del groups_dict[id][memberid]
 		
@@ -93,19 +95,18 @@ def TcpCommunication():
 	global TCP_PORT
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.settimeout(5)
-	sock.bind('',TCP_PORT)
+	sock.bind(('',TCP_PORT))
 	sock.listen(1)
 
 	while True:
 		try:
-			conn,addr = sock.accept()
-			data = conn.recvfrom(1024)
-			(key,_) = struct.unpack('!I',data)
+			conn,(addr,port) = sock.accept()
+			data = conn.recv(1024)
+			(key,) = struct.unpack('!I',data[0:4])
 			data = data[4:]
 			if key == JOIN:          
-				(grpid,tcp_addr,tcp_port,memberid) = struct.unpack('!IIII',data)
-				tcp_addr = int2ip(tcp_addr)
-				message = joinToGroup(grpid,tcp_addr,tcp_port,memberid)
+				(grpid,tcp_port,memberid) = struct.unpack('!III',data)
+				message = joinToGroup(grpid,addr,tcp_port,memberid)
 				conn.send(message)
 			elif key  == LEAVE: 
 				(grpid,memberid) = struct.unpack('!II',data)
@@ -128,8 +129,14 @@ class MyThread(threading.Thread):
 
 def main():
 	
-	Thr1 = MyThread(UdpDiscover,1,"udpDiscover")
-	Thr2 = MyThread(TcpCommunicatiom,2,"tcpCommunicatiom")
+	Thr1 = MyThread(UdpDiscover,1,"UdpDiscover")
+	Thr2 = MyThread(TcpCommunication,2,"TcpCommunication")
+	Thr1.setDaemon(False)
+	Thr2.setDaemon(False)
+	Thr1.start()
+	Thr2.start()
+	#while True:
+		#pass
 
 
 if __name__ == "__main__":
