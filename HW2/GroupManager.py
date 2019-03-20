@@ -71,21 +71,25 @@ def joinToGroup(grpid,addr,port,memberid):
 		ack_msg = struct.pack('!II',1,grp_port)#1 = group members		
 		return ack_msg
 
-def leaveGroup(grpid,memberid):
-	id = groups_names[grpid]
+def leaveGroup(grpname,memberid):
+	id = groups_names[grpname]
 	numofmembers = len(groups_dict[id]) - 1
 
 	if numofmembers == 0:
-
+		#del groups_dict[id][memberid]
+		del groups_dict[id]
+		del groups_names[grpname]
 	elif:
 		informGroupMembers(id,memberid,LEAVE)
-	 
-
+		del groups_dict[id][memberid]
+		
+	ack_msg = struct.pack('!b',1)
+	return ack_msg		
 
 def int2ip(ip):
     return socket.inet_ntoa(struct.pack("!I",ip))
 
-def TcpCommunicatiom():
+def TcpCommunication():
 	global TCP_PORT
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.settimeout(5)
@@ -98,7 +102,7 @@ def TcpCommunicatiom():
 			data = conn.recvfrom(1024)
 			(key,_) = struct.unpack('!I',data)
 			data = data[4:]
-			if key == JOIN:#multicast port          
+			if key == JOIN:          
 				(grpid,tcp_addr,tcp_port,memberid) = struct.unpack('!IIII',data)
 				tcp_addr = int2ip(tcp_addr)
 				message = joinToGroup(grpid,tcp_addr,tcp_port,memberid)
