@@ -31,16 +31,14 @@ def informGroupMembers(grpid,memberid,action):
 	global groups_dict, JOIN, LEAVE
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-	if action == JOIN:
-		message = ('!II',JOIN,memberid)
-	elif action == LEAVE:
-		message = ('!II',LEAVE,memberid)
-	
+	message = struct.pack('!II',action,memberid)
+	#sock.settimeout(3)
+
 	for member in groups_dict[grpid]:
 		(ip,port) = groups_dict[grpid][member]
 		sock.connect((ip,port))
 		sock.send(message) 
-		sock.recv(1024) #wait for ack
+		sock.recv(1024) #wait for ack , send again after timeout
 		
 	sock.close()
 
@@ -62,7 +60,7 @@ def joinToGroup(grpname,addr,port,memberid):
 			ack_msg = struct.pack('!I',-1)# id iparxei, vres allo		+
 			return ack_msg
 		else:
-			#informGroupMembers(grpid,memberid,JOIN) #inform other members, receive acks
+			informGroupMembers(grpid,memberid,JOIN) #inform other members, receive acks
 			groups_dict[grpid][memberid] = (addr,port)
 			ack_msg = ackTonewmember(grpid) #return ack to new member
 			return ack_msg
@@ -81,16 +79,17 @@ def leaveGroup(grpid,memberid):
 	if numofmembers == 0:
 		#del groups_dict[id][memberid]
 		del groups_dict[grpid]
-		#del groups_names[grpname]# problem , delete name!!!!!!!!
+		for name in groups_names:
+			if groups_names[name] == grpid:
+				keytoDel = name
+				break
+		del groups_names[keytoDel]
 	else:
-		#informGroupMembers(id,memberid,LEAVE)
+		informGroupMembers(id,memberid,LEAVE)
 		del groups_dict[grpid][memberid]
 		
 	ack_msg = struct.pack('!b',1)
 	return ack_msg		
-
-def int2ip(ip):
-    return socket.inet_ntoa(struct.pack("!I",ip))
 
 def TcpCommunication():
 	global TCP_PORT,JOIN,LEAVE
@@ -136,9 +135,6 @@ def main():
 	Thr2.setDaemon(False)
 	Thr1.start()
 	Thr2.start()
-	#while True:
-		#pass
-
 
 if __name__ == "__main__":
     main()

@@ -3,14 +3,19 @@ import struct
 import os
 import threading
 import time
+
 MANAGER_TCP_PORT = 0
-TCP_PORT = 0
+TCP_PORT = 12345 #+ os.getpid()
 #grp_members = 0
-members_dict = {}
+groups_dict = {}
+#members_dict = {}
 manager = 0
 JOIN = 6
 LEAVE = 9
 MY_ID = 0
+threadsexist = -1
+GRP_CHANGE = 12 #message for changes in group
+APP_MSG = 21  # message from another member
 
 def discoverManager(addr,port):
 	global manager
@@ -38,6 +43,25 @@ def discoverManager(addr,port):
 	finally:
 		sock.close()
 
+def TcpConnection():
+	global TCP_PORT
+
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	#sock.settimeout(5)
+	sock.bind(('',TCP_PORT))
+	sock.listen(1)
+
+	while True:
+		conn,addr = sock.accept()
+		data = conn.recv(1024)
+		(key,member) = struct.unpack('!II',data)
+		#data = data[8:]
+		ack = struct.pack('!b',1)
+		conn.send(ack)
+		if key == JOIN:
+
+		elif key == LEAVE:
+
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
 		threading.Thread.__init__(self)
@@ -50,11 +74,18 @@ class MyThread(threading.Thread):
 
 
 def grp_join(name,addr,port,myid):
-	global JOIN, LEAVE,members_dict, manager,MY_ID
+	global JOIN, LEAVE,groups_dict, manager,MY_ID,threadsexist
 
 	MY_ID = myid
 
 	manager = discoverManager(addr,port)
+
+	#create thread for receiving from manager
+	if threadsexist == -1:
+		Thr1 = MyThread(TcpConnection,1,"TcpConnection")
+		Thr1.setDaemon(True)
+		Thr1.start()
+		threadsexist = 1
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect(manager)
@@ -69,40 +100,40 @@ def grp_join(name,addr,port,myid):
 	elif grp_members ==  1:
 		(grp_port,) = struct.unpack('!I',data)
 		print(grp_port)
-		members_dict[grp_port] = [myid]  # or [myid]
+		groups_dict[grp_port] = [myid]  # or [myid]
 	else:
 		(grp_port,) = struct.unpack('!I',data[0:4])
 		print(grp_port)
 		data = data[4:]
-		members_dict[grp_port] = []
+		groups_dict[grp_port] = []
 		for i in range(grp_members):
 			(member,) = struct.unpack('!I',data[0:4])
 			data = data[4:]
-			members_dict[grp_port].append(member)
+			groups_dict[grp_port].append(member)
 
 	return grp_port
 
 def grp_leave(gsock):
-	global members_dict, manager, MY_ID
+	global groups_dict, manager, MY_ID
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect(manager)
 
 	message = struct.pack('!III',LEAVE,gsock,MY_ID)
 	sock.send(message)
 	sock.recv(1024)
-	members_dict[gsock].remove(MY_ID)
+	del groups_dict[gsock]
 
 #def grp_send(int gsock,void *msg, int len)
 
 #def grp_recv(int gsock,int *type, void *msg,int *len, int block)
-
+# return type,msg,len
 grp = grp_join(1,"224.0.0.7",2019,os.getpid())
 print("[",os.getpid(),"] "," In group 1")
-for m in members_dict:
-	print(members_dict[m])
+for m in groups_dict:
+	print(groups_dict[m])
 
 time.sleep(3)
 print("Leaving")
 grp_leave(grp)
-for m in members_dict:
-	print(members_dict[m])
+for m in groups_dict:
+	print(groups_dict[m])
