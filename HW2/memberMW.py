@@ -6,9 +6,7 @@ import time
 
 MANAGER_TCP_PORT = 0
 TCP_PORT = 12345 #+ os.getpid()
-#grp_members = 0
 groups_dict = {}
-#members_dict = {}
 manager = 0
 JOIN = 6
 LEAVE = 9
@@ -35,6 +33,7 @@ def discoverManager(addr,port):
 				data, manager = sock.recvfrom(16)
 				(man_addr,man_port) = manager
 				(MANAGER_TCP_PORT,) = struct.unpack('!I',data)
+
 			except socket.timeout:
 				print("No manager found\n")
 			else:
@@ -58,9 +57,9 @@ def TcpConnection():
 		#data = data[8:]
 		ack = struct.pack('!b',1)
 		conn.send(ack)
-		if key == JOIN:
+		#if key == JOIN:
 
-		elif key == LEAVE:
+		#elif key == LEAVE:
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
@@ -100,7 +99,7 @@ def grp_join(name,addr,port,myid):
 	elif grp_members ==  1:
 		(grp_port,) = struct.unpack('!I',data)
 		print(grp_port)
-		groups_dict[grp_port] = [myid]  # or [myid]
+		groups_dict[grp_port] = [myid] 
 	else:
 		(grp_port,) = struct.unpack('!I',data[0:4])
 		print(grp_port)
@@ -124,6 +123,7 @@ def grp_leave(gsock):
 	del groups_dict[gsock]
 
 #def grp_send(int gsock,void *msg, int len)
+#add message to mem
 
 #def grp_recv(int gsock,int *type, void *msg,int *len, int block)
 # return type,msg,len
@@ -137,3 +137,7 @@ print("Leaving")
 grp_leave(grp)
 for m in groups_dict:
 	print(groups_dict[m])
+
+#sender thread
+#read from mem
+#send

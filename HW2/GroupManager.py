@@ -22,7 +22,7 @@ def UdpDiscover():
 	print(multicast_addr)
 	while True:
 		(data, addr) = manager.recvfrom(1024)
-		print("Found")
+		print("Found from ", addr)
 
 		message = struct.pack('!I',TCP_PORT)
 		manager.sendto(message,addr)
@@ -101,6 +101,7 @@ def TcpCommunication():
 	while True:
 		try:
 			conn,(addr,port) = sock.accept()
+			print(addr,port)
 			data = conn.recv(1024)
 			(key,) = struct.unpack('!I',data[0:4])
 			data = data[4:]
