@@ -30,17 +30,19 @@ def UdpDiscover():
 def informGroupMembers(grpid,memberid,action):
 	global groups_dict, JOIN, LEAVE
 
-	sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-	message = struct.pack('!II',action,memberid)
+	#sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)'
+
+	message = struct.pack('!III',action,grpid,memberid)
 	#sock.settimeout(3)
 
 	for member in groups_dict[grpid]:
+		sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #not optimal
 		(ip,port) = groups_dict[grpid][member]
+		print(ip,port)
 		sock.connect((ip,port))
 		sock.send(message) 
 		sock.recv(1024) #wait for ack , send again after timeout
-		
-	sock.close()
+		sock.close()
 
 def ackTonewmember(grpid):
 	numofmembers = len(groups_dict[grpid])
@@ -74,6 +76,8 @@ def joinToGroup(grpname,addr,port,memberid):
 
 def leaveGroup(grpid,memberid):
 	global LEAVE
+
+	#grpid = groups_names[grpname]
 	numofmembers = len(groups_dict[grpid]) - 1
 
 	if numofmembers == 0:
@@ -85,7 +89,7 @@ def leaveGroup(grpid,memberid):
 				break
 		del groups_names[keytoDel]
 	else:
-		informGroupMembers(id,memberid,LEAVE)
+		informGroupMembers(grpid,memberid,LEAVE)
 		del groups_dict[grpid][memberid]
 		
 	ack_msg = struct.pack('!b',1)

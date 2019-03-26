@@ -3,17 +3,29 @@ import struct
 import os
 import threading
 import time
+import queue
 
 MANAGER_TCP_PORT = 0
-TCP_PORT = 12345 #+ os.getpid()
+multicast_addr = '224.0.0.6'
+TCP_PORT = 12345 + os.getpid()
 groups_dict = {}
 manager = 0
 JOIN = 6
 LEAVE = 9
 MY_ID = 0
 threadsexist = -1
+senderThr = -1
+sender_sem = threading.Semaphore(0)
 GRP_CHANGE = 12 #message for changes in group
 APP_MSG = 21  # message from another member
+MSG_LOSS = 13 # send multicast - lost a message
+MSG_OK = 31 # message with data to send to group
+received_msgs = {}
+msgs_to_send = {}
+send_lock = threading.Lock()
+TIMEOUT = 4000
+msg_num = 0
+msgLists = {}
 
 def discoverManager(addr,port):
 	global manager
@@ -43,7 +55,7 @@ def discoverManager(addr,port):
 		sock.close()
 
 def TcpConnection():
-	global TCP_PORT
+	global TCP_PORT, groups_dict,GRP_CHANGE,msgList
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	#sock.settimeout(5)
@@ -53,14 +65,15 @@ def TcpConnection():
 	while True:
 		conn,addr = sock.accept()
 		data = conn.recv(1024)
-		(key,member) = struct.unpack('!II',data)
-		#data = data[8:]
+		(key,grpid,member) = struct.unpack('!III',data)
 		ack = struct.pack('!b',1)
 		conn.send(ack)
-		#if key == JOIN:
+		if key == JOIN:
+			groups_dict[grpid].append(member)
+		elif key == LEAVE:
+			groups_dict[grpid].delete(member)
 
-		#elif key == LEAVE:
-
+		msgList[grpid].append((GRP_CHANGE,member,key,"")) #type,member,length/action,message_data
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
 		threading.Thread.__init__(self)
@@ -70,7 +83,6 @@ class MyThread(threading.Thread):
 		self._args = args#empty
 	def run(self):
 		self._funcToRun(*self._args)
-
 
 def grp_join(name,addr,port,myid):
 	global JOIN, LEAVE,groups_dict, manager,MY_ID,threadsexist
@@ -122,8 +134,52 @@ def grp_leave(gsock):
 	sock.recv(1024)
 	del groups_dict[gsock]
 
-#def grp_send(int gsock,void *msg, int len)
-#add message to mem
+def next_msg():
+	global msgs_to_send
+
+	for msg in msgs_to_send:
+		msgs_to_send[msg][6] -= 1 #timeout
+		if msgs_to_send[msg][5] == False and msgs_to_send[msg][6] <= 0: #with ack, timeout
+			return msg
+		elif msgs_to_send[msg][4] == False: #sent
+			return msg
+		else:
+			return -1
+
+def Sender():
+	global msgs_to_send,TIMEOUT,sender_sem,send_lock
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+
+	sender_sem.acquire()
+
+	with send_lock:
+		msgTosend = next_msg()
+		[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgTosend]
+
+	timeout = TIMEOUT
+	sent = True
+	with_ack = False
+	message = struct.pack('!IIIIs',type,msgTosend,len,MY_ID,data)
+	msgs_to_send[msgTosend] = [type,grp,len,msg,sent,with_ack,timeout]
+	sock.send(message,(multicast_addr,grp))
+
+def grp_send(gsock,msg,len)
+	global senderThr, msgs_to_send,msg_num,TIMEOUT,send_lock
+
+	if senderThr == -1:
+		Thr2 = MyThread(Sender,2,"Sender")
+		Thr2.setDaemon(True)
+		Thr2.start()
+		senderThr = 1
+
+	msg_num += 1	
+	msgID = int(str(MY_ID) + str(msg_num))
+	with send_lock:
+		msgs_to_send[msgID] = (MSG_OK,gsock,len,msg,,False,False,TIMEOUT)#(message_type,group,length,message,sent,with_ack from group boss,timeout)
+
+
+	sender_sem.release()	
+	return 1
 
 #def grp_recv(int gsock,int *type, void *msg,int *len, int block)
 # return type,msg,len
