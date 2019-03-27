@@ -3,7 +3,6 @@ import struct
 import os
 import threading
 import time
-import queue
 
 MANAGER_TCP_PORT = 0
 multicast_addr = '224.0.0.6'
@@ -108,16 +107,23 @@ def Receiver(port):
 		(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
 		msg = data[16:]
 		if type == GROUP_MSG:         # message with data from a member
-			if msgID in received_msgs:   # if seq_num received earlier - inform dictionary
+			if msgID in received_msgs and BOSS == False:   # if seq_num received earlier - inform dictionary
 				received_msgs[msgID][0] = len
 				received_msgs[msgID][1] = msg
 				received_msgs[msgID][3] = senderID
 			else:         #new message
 				received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
-			if BOSS == True:      
-				global_seq += 1 
-				message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
-				sock.sendto(message,(multicast_addr,port))
+			if BOSS == True:
+				if msgID not in received_msgs:
+					received_msgs[msgID] = [len,msg,-1,senderID]      
+					global_seq += 1 
+					received_msgs[msgID][2] = global_seq
+					message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
+					sock.sendto(message,(multicast_addr,port))
+				else:
+					#print(received_msgs[msgID][2])
+					message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
+					sock.sendto(message,(multicast_addr,port))
 		elif type == MSG_LOSS:
 			if msgID in msgs_to_send:   #if it is mine send again
 				[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgID]
@@ -225,6 +231,7 @@ def Sender():
 		timeout = TIMEOUT
 		sent = True
 		with_ack = False
+		print(msg,"@")
 		message = struct.pack('!IIII',type,msgTosend,len,MY_ID) + msg
 		msgs_to_send[msgTosend] = [type,grp,len,msg,sent,with_ack,timeout]
 		sock.sendto(message,(multicast_addr,grp))

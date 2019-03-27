@@ -17,7 +17,6 @@ def Send():
 	while True:
 		message = input()
 		message = message.encode()
-		print(message,"##")
 		mw.grp_send(gsock,message,len(message))
 
 def Receive():
