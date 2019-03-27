@@ -1,10 +1,10 @@
 import socket
 import struct
 import threading
-
+import os
 multicast_ip = "224.0.0.7"
 multicast_addr = ('',2019)
-TCP_PORT = 2018
+TCP_PORT = os.getpid()+1821
 groups_dict = {} #leksiko me groups -> leksiko me tuples ton members
 groups_names = {} #antistoixisi group_port me group_name 
 GROUPS_PORTS = 10000 # port gia kathe group
