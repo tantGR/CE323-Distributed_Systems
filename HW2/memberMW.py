@@ -24,7 +24,7 @@ GROUP_MSG = 31 # message with data to send to group   meber->member
 received_msgs = {}
 msgs_to_send = {}
 send_lock = threading.Lock()
-TIMEOUT = 4000
+TIMEOUT = 7000
 msg_num = 0
 lists_lock = threading.Lock()
 msgLists = {}
@@ -89,7 +89,7 @@ class MyThread(threading.Thread):
 		self._funcToRun(*self._args)
 
 def Receiver(port):
-	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID, GROUP_MSG,MSG_LOSS,SEQ_NUM,block_rcv
+	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID, GROUP_MSG,MSG_LOSS,SEQ_NUM,block_rcv,send_lock
 
 	global_seq = 0
 	last_seq_num = 0
@@ -107,23 +107,24 @@ def Receiver(port):
 		(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
 		msg = data[16:]
 		if type == GROUP_MSG:         # message with data from a member
-			if msgID in received_msgs and BOSS == False:   # if seq_num received earlier - inform dictionary
-				received_msgs[msgID][0] = len
-				received_msgs[msgID][1] = msg
-				received_msgs[msgID][3] = senderID
-			else:         #new message
-				received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
-			if BOSS == True:
-				if msgID not in received_msgs:
+			if BOSS == False:
+				if msgID in received_msgs:   # if seq_num received earlier - inform dictionary
+					received_msgs[msgID][0] = len
+					received_msgs[msgID][1] = msg
+					received_msgs[msgID][3] = senderID
+				else:         #new message
+					received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
+			elif BOSS == True:
+				if msgID in received_msgs:
+					message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
+					sock.sendto(message,(multicast_addr,port))
+				else:
 					received_msgs[msgID] = [len,msg,-1,senderID]      
 					global_seq += 1 
 					received_msgs[msgID][2] = global_seq
 					message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
 					sock.sendto(message,(multicast_addr,port))
-				else:
-					#print(received_msgs[msgID][2])
-					message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
-					sock.sendto(message,(multicast_addr,port))
+					
 		elif type == MSG_LOSS:
 			if msgID in msgs_to_send:   #if it is mine send again
 				[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgID]
@@ -131,8 +132,9 @@ def Receiver(port):
 				sock.sendto(message,addr)
 		elif type == SEQ_NUM:
 			received_seq = len
-			if msgID in msgs_to_send:
-				msgs_to_send[msgID][5] = True
+			with send_lock:
+				if msgID in msgs_to_send:
+					msgs_to_send[msgID][5] = True
 			if msgID not in received_msgs:   #if message not received
 				received_msgs[msgID] = [0,"",received_seq,0]
 			else:                 #if message received earlier
@@ -143,7 +145,8 @@ def Receiver(port):
 					data = received_msgs[msgID][1]
 					msgLists[port].append((APP_MSG,member,length,data))
 					block_rcv.release()
-					del received_msgs[msgID]
+					if BOSS == False:
+						del received_msgs[msgID]
 					last_seq_num = received_seq
 					#send_ready_msgs()
 
@@ -176,6 +179,7 @@ def grp_join(name,addr,port,myid):
 		print(grp_port)
 		groups_dict[grp_port] = [myid] 
 		BOSS = True
+		print("BOSS")
 	else:
 		(grp_port,) = struct.unpack('!I',data[0:4])
 		print(grp_port)
@@ -205,14 +209,16 @@ def grp_leave(gsock):
 def next_msg():
 	global msgs_to_send
 
-	for msg in msgs_to_send:
-		msgs_to_send[msg][6] -= 1 #timeout
-		if msgs_to_send[msg][5] == False and msgs_to_send[msg][6] <= 0: #with ack, timeout
-			return msg
-		elif msgs_to_send[msg][4] == False: #sent
-			return msg
-		else:
-			return -1
+	with send_lock:
+		for msg in msgs_to_send:
+			if msgs_to_send[msg][6] >= 0:
+				msgs_to_send[msg][6] -= 1 #timeout
+			if msgs_to_send[msg][4] == False:
+				return msg
+			elif msgs_to_send[msg][5] == False and msgs_to_send[msg][6] <= 0: 
+				return msg
+			
+	return -1
 
 def Sender():
 	global msgs_to_send,TIMEOUT,sender_sem,send_lock,multicast_addr
@@ -221,19 +227,19 @@ def Sender():
 	sender_sem.acquire()
 
 	while True:
-		with send_lock:
-			msgTosend = next_msg()
-			if msgTosend == -1:
-				continue
-			else:
-				[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgTosend]
+		
+		msgTosend = next_msg()
+		if msgTosend == -1:
+			continue
+		else:
+			[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgTosend]
 
 		timeout = TIMEOUT
 		sent = True
 		with_ack = False
-		print(msg,"@")
 		message = struct.pack('!IIII',type,msgTosend,len,MY_ID) + msg
-		msgs_to_send[msgTosend] = [type,grp,len,msg,sent,with_ack,timeout]
+		with send_lock:
+			msgs_to_send[msgTosend] = [type,grp,len,msg,sent,with_ack,timeout]
 		sock.sendto(message,(multicast_addr,grp))
 
 def grp_send(gsock,msg,len):

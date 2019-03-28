@@ -17,7 +17,7 @@ def Send():
 	while True:
 		message = input()
 		message = message.encode()
-		mw.grp_send(gsock,message,len(message))
+		res = mw.grp_send(gsock,message,len(message))
 
 def Receive():
 	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
