@@ -35,9 +35,10 @@ def informGroupMembers(grpid,memberid,action,BOSS):
 	message = struct.pack('!III',action,grpid,memberid)
 	#sock.settimeout(3)
 
-	i = 0
+	Flag = False
 	for member in groups_dict[grpid]:
-		if i== 0 and BOSS == True:
+		if Flag==False and BOSS == True and member != memberid:
+			Flag = True
 			message = message = struct.pack('!III?',action,grpid,memberid,True)
 		else:
 			message = struct.pack('!III?',action,grpid,memberid,False)
@@ -50,7 +51,7 @@ def informGroupMembers(grpid,memberid,action,BOSS):
 		sock.send(message) 
 		sock.recv(1024) #wait for ack , send again after timeout
 		sock.close()
-		i=i+1
+		
 
 def ackTonewmember(grpid):
 	numofmembers = len(groups_dict[grpid])
