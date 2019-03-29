@@ -19,8 +19,10 @@ block_rcv = threading.Semaphore(0)
 GRP_CHANGE = 12 #message for changes in group - mw->app
 APP_MSG = 21  # message from another member      mw->app
 MSG_LOSS = 13 # send multicast - lost a message     member->member
+SEQ_LOSS = 44
 SEQ_NUM = 33 # seq number from boss
-CURR_SEQ = 11 
+CURR_SEQ_Q = 56 
+CURR_SEQ_A = 65
 GROUP_MSG = 31 # message with data to send to group   meber->member 
 received_msgs = {}
 msgs_to_send = {}
@@ -30,8 +32,8 @@ msg_num = 0
 lists_lock = threading.Lock()
 msgLists = {}
 BOSS = False
+arrival_time = {}
 global_seq = 0
-first_msg = -1
 
 def discoverManager(addr,port):
 	global manager
@@ -61,7 +63,7 @@ def discoverManager(addr,port):
 		sock.close()
 
 def TcpConnection():
-	global TCP_PORT, groups_dict,GRP_CHANGE,msgLists
+	global TCP_PORT, groups_dict,GRP_CHANGE,msgLists,BOSS,arrival_time
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	#sock.settimeout(5)
@@ -76,6 +78,8 @@ def TcpConnection():
 		conn.send(ack)
 		if key == JOIN:
 			groups_dict[grpid].append(member)
+			if BOSS == True:
+					arrival_time[member] = global_seq
 		elif key == LEAVE:
 			groups_dict[grpid].delete(member)
 		with lists_lock:	
@@ -91,7 +95,7 @@ class MyThread(threading.Thread):
 		self._funcToRun(*self._args)
 
 def send_ready_msgs(port,last_seq_num):
-	global received_msgs, msgLists,BOSS
+	global received_msgs, msgLists,BOSS,msgs_to_send,global_seq
 	flag = 1
 	toDel = []
 	
@@ -111,10 +115,14 @@ def send_ready_msgs(port,last_seq_num):
 	return last_seq_num
 
 def Receiver(port):
-	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID, GROUP_MSG,MSG_LOSS,SEQ_NUM,block_rcv,send_lock,first_msg,msgLists,BOSS
-
+	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID,block_rcv,send_lock,msgLists,BOSS,arrival_time
+	global CURR_SEQ,GROUP_MSG,MSG_LOSS,SEQ_NUM, SEQ_LOSS
 	global_seq = 0
-	last_seq_num = 0
+	if BOSS == True:
+		last_seq_num = 0
+	else:
+		last_seq_num = -1
+	new_in_grp = 1
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM,socket.IPPROTO_UDP)
 	group = socket.inet_aton(multicast_addr)
@@ -124,6 +132,9 @@ def Receiver(port):
 	sock.bind((multicast_addr,port))
 
 	while True:
+		if BOSS == False and new_in_grp == 1:
+			message = struct.pack('!IIII',CURR_SEQ_Q,0,0,MY_ID)
+			sock.sendto(message,(multicast_addr,port))
 		data,addr = sock.recvfrom(1024)
 
 		(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
@@ -157,9 +168,6 @@ def Receiver(port):
 				print("LOSS")
 		elif type == SEQ_NUM:
 			print("\t",len)
-			if first_msg == -1:
-				first_msg = 1
-				last_seq_num = len-1 #check the current seq when joining later 
 			received_seq = len
 			with send_lock:
 				if msgID in msgs_to_send:
@@ -172,11 +180,32 @@ def Receiver(port):
 				received_msgs[msgID][2] = received_seq
 				last_seq_num = send_ready_msgs(port,last_seq_num)
 				block_rcv.release()
-		elif type == CURR_SEQ:
-			last_seq_num = len
+
+			if received_seq > (last_seq_num + 1) and last_seq_num != -1:
+				message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
+				sock.sendto(message,(multicast_addr,port))
+
+		elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
+			#print("CURR_SEQ")
+			if BOSS == True and type == CURR_SEQ_Q:
+				if senderID in arrival_time:
+					seq = arrival_time[senderID]
+				message = struct.pack('!IIII',CURR_SEQ_A,0,seq,MY_ID)+"".encode()
+				sock.sendto(message,(multicast_addr,port))
+			elif BOSS == False and type == CURR_SEQ_A and new_in_grp == 1:
+				new_in_grp = 0
+				last_seq_num = len
+		elif type == SEQ_LOSS and BOSS == True:
+			print ("SEQ_LOSS")
+			last = msgID
+			received = len
+			for m in received_msgs:
+				if received_msgs[m][2] in range(last+1,received+1):
+					message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
+					sock.sendto(message,addr)
 
 def grp_join(name,addr,port,myid):
-	global JOIN, LEAVE,groups_dict, manager,MY_ID,threadsexist,BOSS,msgLists
+	global JOIN, LEAVE,groups_dict, manager,MY_ID,threadsexist,BOSS,msgLists,senderThr
 
 	MY_ID = myid
 
@@ -219,6 +248,13 @@ def grp_join(name,addr,port,myid):
 	Thr3 = MyThread(Receiver,3,"Receiver",grp_port) 
 	Thr3.setDaemon(True)
 	Thr3.start() # start receiver
+
+	if senderThr == -1:
+		Thr2 = MyThread(Sender,2,"Sender")
+		Thr2.setDaemon(True)
+		Thr2.start()
+		senderThr = 1
+	
 	return grp_port
 
 def grp_leave(gsock):
@@ -270,11 +306,11 @@ def Sender():
 def grp_send(gsock,msg,len):
 	global senderThr, msgs_to_send,msg_num,TIMEOUT,send_lock
 
-	if senderThr == -1:
-		Thr2 = MyThread(Sender,2,"Sender")
-		Thr2.setDaemon(True)
-		Thr2.start()
-		senderThr = 1
+	#if senderThr == -1:
+	#	Thr2 = MyThread(Sender,2,"Sender")
+	#	Thr2.setDaemon(True)
+	#	Thr2.start()
+	#	senderThr = 1
 
 	msg_num += 1	
 	msgID = int(str(MY_ID) + str(msg_num))
@@ -304,5 +340,6 @@ def grp_recv(gsock,block):
 
 
 
-
+#LOCKS for: global_seq
+#			arrival_time
 
