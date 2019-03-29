@@ -94,6 +94,17 @@ class MyThread(threading.Thread):
 	def run(self):
 		self._funcToRun(*self._args)
 
+def check_for_losses(port,last_seq_num,sock):
+	print("CHECK")
+	for m in received_msgs:
+		if received_msgs[m][0] == 0:
+			seq = received_msgs[m][2]
+			message = struct.pack('!IIII',MSG_LOSS,msgID,seq,MY_ID)+"".encode()
+			sock.sendto(message,(multicast_addr,port))
+		elif received_msgs[m][2] == -1:
+			message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,last_seq_num+2,MY_ID)+"".encode()
+			sock.sendto(message,(multicast_addr,port))
+		#else:
 def send_ready_msgs(port,last_seq_num):
 	global received_msgs, msgLists,BOSS,msgs_to_send,global_seq
 	flag = 1
@@ -118,6 +129,7 @@ def Receiver(port):
 	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID,block_rcv,send_lock,msgLists,BOSS,arrival_time
 	global CURR_SEQ,GROUP_MSG,MSG_LOSS,SEQ_NUM, SEQ_LOSS
 	global_seq = 0
+	timeout = 4
 	if BOSS == True:
 		last_seq_num = 0
 	else:
@@ -129,80 +141,91 @@ def Receiver(port):
 	mreq = struct.pack('4sL',group,socket.INADDR_ANY)
 	sock.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,mreq)
 	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	sock.settimeout(timeout)
 	sock.bind((multicast_addr,port))
 
+	start_time = time.time()
 	while True:
 		if BOSS == False and new_in_grp == 1:
 			message = struct.pack('!IIII',CURR_SEQ_Q,0,0,MY_ID)
 			sock.sendto(message,(multicast_addr,port))
-		data,addr = sock.recvfrom(1024)
-
-		(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
-		msg = data[16:]
-		if type == GROUP_MSG:         # message with data from a member
-			if BOSS == False:
-				if msgID in received_msgs:   # if seq_num received earlier - inform dictionary
-					received_msgs[msgID][0] = len
-					received_msgs[msgID][1] = msg
-					received_msgs[msgID][3] = senderID
-					last_seq_num = send_ready_msgs(port,last_seq_num)
-				else:         #new message
-					received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
-			elif BOSS == True:
-				if msgID in received_msgs:
-					message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
-					sock.sendto(message,(multicast_addr,port))
-				else:
-					received_msgs[msgID] = [len,msg,-1,senderID]      
-					global_seq += 1 
-					received_msgs[msgID][2] = global_seq
-					print("\t\t",global_seq)
-					message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
-					sock.sendto(message,(multicast_addr,port))
-					
-		elif type == MSG_LOSS:
-			if msgID in msgs_to_send:   #if it is mine send again
-				[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgID]
-				message = struct.pack('!IIII',type,msgID,len,MY_ID)+msg
-				sock.sendto(message,addr)
-				print("LOSS")
-		elif type == SEQ_NUM:
-			print("\t",len)
-			received_seq = len
-			with send_lock:
-				if msgID in msgs_to_send:
-					msgs_to_send[msgID][5] = True
-			if msgID not in received_msgs:   #if message not received
-				received_msgs[msgID] = [0,"",received_seq,0]
-				message = struct.pack('!IIII',MSG_LOSS,msgID,len,MY_ID)+"".encode()
-				sock.sendto(message,(multicast_addr,port))
-			else:                 #if message received earlier
-				received_msgs[msgID][2] = received_seq
-				last_seq_num = send_ready_msgs(port,last_seq_num)
-				block_rcv.release()
-
-			if received_seq > (last_seq_num + 1) and last_seq_num != -1:
-				message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
-				sock.sendto(message,(multicast_addr,port))
-
-		elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
-			#print("CURR_SEQ")
-			if BOSS == True and type == CURR_SEQ_Q:
-				if senderID in arrival_time:
-					seq = arrival_time[senderID]
-				message = struct.pack('!IIII',CURR_SEQ_A,0,seq,MY_ID)+"".encode()
-				sock.sendto(message,(multicast_addr,port))
-			elif BOSS == False and type == CURR_SEQ_A and new_in_grp == 1:
-				new_in_grp = 0
-				last_seq_num = len
-		elif type == SEQ_LOSS and BOSS == True:
-			print ("SEQ_LOSS")
-			last = msgID
-			received = len
-			for m in received_msgs:
-				if received_msgs[m][2] in range(last+1,received+1):
-					message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
+		try:
+			data,addr = sock.recvfrom(1024)
+		except socket.timeout:
+			check_for_losses(port,last_seq_num,sock)
+			start_time = time.time()
+			print("timeout")
+			continue
+		else:
+			(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
+			msg = data[16:]
+			if type == GROUP_MSG:         # message with data from a member
+				if BOSS == False:
+					if msgID in received_msgs:   # if seq_num received earlier - inform dictionary
+						received_msgs[msgID][0] = len
+						received_msgs[msgID][1] = msg
+						received_msgs[msgID][3] = senderID
+						last_seq_num = send_ready_msgs(port,last_seq_num)
+					else:         #new message
+						received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
+				elif BOSS == True:
+					if msgID in received_msgs:
+						message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
+						sock.sendto(message,(multicast_addr,port))
+					else:
+						received_msgs[msgID] = [len,msg,-1,senderID]      
+						global_seq += 1 
+						received_msgs[msgID][2] = global_seq
+						print("\t\t",global_seq)
+						message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
+						sock.sendto(message,(multicast_addr,port))
+						
+			elif type == MSG_LOSS:
+				if msgID in msgs_to_send:   #if it is mine send again
+					[type,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgID]
+					message = struct.pack('!IIII',type,msgID,len,MY_ID)+msg
 					sock.sendto(message,addr)
+					print("LOSS")
+			elif type == SEQ_NUM:
+				print("\t",len)
+				received_seq = len
+				with send_lock:
+					if msgID in msgs_to_send:
+						msgs_to_send[msgID][5] = True
+				if msgID not in received_msgs:   #if message not received
+					received_msgs[msgID] = [0,"",received_seq,0]
+					message = struct.pack('!IIII',MSG_LOSS,msgID,len,MY_ID)+"".encode()
+					sock.sendto(message,(multicast_addr,port))
+				else:                 #if message received earlier
+					received_msgs[msgID][2] = received_seq
+					last_seq_num = send_ready_msgs(port,last_seq_num)
+					block_rcv.release()
+
+				if received_seq > (last_seq_num + 1) and last_seq_num != -1:
+					message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
+					sock.sendto(message,(multicast_addr,port))
+
+			elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
+				#print("CURR_SEQ")
+				if BOSS == True and type == CURR_SEQ_Q:
+					if senderID in arrival_time:
+						seq = arrival_time[senderID]
+					message = struct.pack('!IIII',CURR_SEQ_A,0,seq,MY_ID)+"".encode()
+					sock.sendto(message,(multicast_addr,port))
+				elif BOSS == False and type == CURR_SEQ_A and new_in_grp == 1:
+					new_in_grp = 0
+					last_seq_num = len
+			elif type == SEQ_LOSS and BOSS == True:
+				print ("SEQ_LOSS")
+				last = msgID
+				received = len
+				for m in received_msgs:
+					if received_msgs[m][2] in range(last+1,received+1):
+						message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
+						sock.sendto(message,addr)
+		if (time.time() - start_time) >= timeout:
+			check_for_losses(port,last_seq_num,sock)
+			start_time = time.time()
 
 def grp_join(name,addr,port,myid):
 	global JOIN, LEAVE,groups_dict, manager,MY_ID,threadsexist,BOSS,msgLists,senderThr
@@ -343,3 +366,6 @@ def grp_recv(gsock,block):
 #LOCKS for: global_seq
 #			arrival_time
 
+#check if you do not receive anything
+#grp_leave
+#new boss 
