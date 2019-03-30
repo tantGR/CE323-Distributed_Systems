@@ -35,7 +35,10 @@ def Receive():
 				print(member,"joined group")
 		elif type == APP_MSG:
 			msg = msg.decode()
-			print("[",member,"] ",msg)
+			if member == ID:
+				print("\t\t\t\t\t",msg,"[",member,"] ")
+			else:
+				print("[",member,"] ",msg)
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):

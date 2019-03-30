@@ -96,7 +96,6 @@ class MyThread(threading.Thread):
 
 def check_for_losses(port,last_seq_num,sock):
 	global MSG_LOSS,SEQ_LOSS,multicast_addr,MY_ID,received_msgs, GROUP_MSG
-	print("CHECK")
 	for m in received_msgs:
 		if received_msgs[m][0] == 0:
 			seq = received_msgs[m][2]
@@ -107,8 +106,8 @@ def check_for_losses(port,last_seq_num,sock):
 			message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,last_seq_num+2,MY_ID)+"".encode()
 			sock.sendto(message,(multicast_addr,port))
 
-	print("ANYTHING LOST??")
-	print("\t\t",last_seq_num)
+	print("\t\t\tANYTHING LOST??")
+	#print("\t\t",last_seq_num)
 	message = struct.pack('!IIII',GROUP_MSG,0,0,MY_ID) #send the global seq
 	sock.sendto(message,(multicast_addr,port))
 def send_ready_msgs(port,last_seq_num):
@@ -160,7 +159,7 @@ def Receiver(port):
 		except socket.timeout:
 			check_for_losses(port,last_seq_num,sock)
 			start_time = time.time()
-			print("timeout")
+			#print("timeout")
 			continue
 		else:
 			(type,msgID,len,senderID) = struct.unpack('!IIII',data[0:16])#len->length or seq_num or 0
@@ -205,6 +204,7 @@ def Receiver(port):
 					received_msgs[msgID] = [0,"",received_seq,0]
 					message = struct.pack('!IIII',MSG_LOSS,msgID,len,MY_ID)+"".encode()
 					sock.sendto(message,(multicast_addr,port))
+					print("\t\tMSG_LOSS")
 				else:                 #if message received earlier
 					if msgID > 0:
 						received_msgs[msgID][2] = received_seq
@@ -215,6 +215,7 @@ def Receiver(port):
 					#print("\t\t",last_seq_num, received_seq)
 					message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
 					sock.sendto(message,(multicast_addr,port))
+					print("\t\tSEQ_LOSS")
 
 			elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
 				#print("CURR_SEQ")
@@ -235,7 +236,7 @@ def Receiver(port):
 						message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
 						sock.sendto(message,(multicast_addr,port))
 		if (time.time() - start_time) >= 10:
-			print("TIMEOUT")
+			#print("TIMEOUT")
 			check_for_losses(port,last_seq_num,sock)
 			start_time = time.time()
 
@@ -268,7 +269,7 @@ def grp_join(name,addr,port,myid):
 		print(grp_port)
 		groups_dict[grp_port] = [myid] 
 		BOSS = True
-		print("BOSS")
+		print("You created this group.")
 	else:
 		(grp_port,) = struct.unpack('!I',data[0:4])
 		print(grp_port)
@@ -341,12 +342,6 @@ def Sender():
 def grp_send(gsock,msg,len):
 	global senderThr, msgs_to_send,msg_num,TIMEOUT,send_lock
 
-	#if senderThr == -1:
-	#	Thr2 = MyThread(Sender,2,"Sender")
-	#	Thr2.setDaemon(True)
-	#	Thr2.start()
-	#	senderThr = 1
-
 	msg_num += 1	
 	msgID = int(str(MY_ID) + str(msg_num))
 	with send_lock:
@@ -372,12 +367,3 @@ def grp_recv(gsock,block):
 			message = msgLists[gsock][0] #message = (type,member,action/length,msg)
 			del msgLists[gsock][0]
 			return message
-
-
-
-#LOCKS for: global_seq
-#			arrival_time
-
-#check if you do not receive anything
-#grp_leave
-#new boss 
