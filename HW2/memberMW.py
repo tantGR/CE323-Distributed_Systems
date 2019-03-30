@@ -81,7 +81,7 @@ def TcpConnection():
 		if key == JOIN:
 			groups_dict[grpid].append(member)
 			if BOSS == True:
-					arrival_time[member] = global_seq
+				arrival_time[member] = global_seq
 		elif key == LEAVE:
 			for i in range(len(groups_dict[grpid])):
 				if groups_dict[grpid][i] == member:
@@ -184,9 +184,19 @@ def Receiver(port):
 						received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
 				elif BOSS == True:
 					if msgID == 0: #check for losses - send back global_seq
+						print(global_seq)
+						#error edw:
+						#struct.error: required argument is not an integer
+						print("SEQ_NUM:",SEQ_NUM)
+						print("global_seq:",global_seq)
+						print("msgid:",msgID)
 						message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
 						sock.sendto(message,(multicast_addr,port))
 					elif msgID in received_msgs:
+						#edw petaei "out of range"
+						# seq_num: 33
+						# msgID: 14606175
+						# received_msgs[msgID][2]: -1
 						message = struct.pack('!IIII',SEQ_NUM,msgID,received_msgs[msgID][2],0)+"".encode() # send seq_num to group members
 						sock.sendto(message,(multicast_addr,port))
 					else:
@@ -229,6 +239,10 @@ def Receiver(port):
 				if BOSS == True and type == CURR_SEQ_Q:
 					if senderID in arrival_time:
 						seq = arrival_time[senderID]
+
+					#edw petaei error:
+					#UnboundLocalError: local variable 'seq' referenced before assignment
+	
 					message = struct.pack('!IIII',CURR_SEQ_A,0,seq,MY_ID)+"".encode()
 					#UnboundLocalError: local variable 'seq' referenced before assignment
 					#line 232.Ti ginetai sto seq????!
@@ -247,6 +261,7 @@ def Receiver(port):
 						sock.sendto(message,(multicast_addr,port))
 			elif type == NEW_BOSS:
 				if senderID == MY_ID:
+					(global_seq)=struct.unpack("!I",msg)
 					message = struct.pack("!II",NEW_BOSS,OK)
 					sock.sendto(message,addr)
 					BOSS=True
@@ -311,9 +326,14 @@ def grp_join(name,addr,port,myid):
 	return grp_port
 
 def setNewBoss(grpid):
-	global groups_dict,NEW_BOSS,multicast_addr,OK
+	global groups_dict,NEW_BOSS,multicast_addr,OK,global_seq
+	
+	#isws prepei na steilw kai afta
+	#received_msgs[msgID]
+	#received_msgs, global_seq,msgs_to_send
+
 	#send message to last member of the group
-	message = struct.pack('!IIII',NEW_BOSS,0,0,groups_dict[grpid][-1])+"".encode() 
+	message = struct.pack('!IIIII',NEW_BOSS,0,0,groups_dict[grpid][1],global_seq)#+"".encode() 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 	sock.settimeout(3)
 	try:
@@ -334,7 +354,7 @@ def grp_leave(gsock):
 	global BOSS
 
 	if BOSS==True and len(groups_dict[gsock])>1:
-		print(len(groups_dict[gsock]))
+		BOSS=False
 		setNewBoss(gsock)
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
