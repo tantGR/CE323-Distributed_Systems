@@ -27,7 +27,7 @@ def UdpDiscover():
 		message = struct.pack('!I',TCP_PORT)
 		manager.sendto(message,addr)
 
-def informGroupMembers(grpid,memberid,action,BOSS):
+def informGroupMembers(grpid,memberid,action):
 	global groups_dict, JOIN, LEAVE
 
 	#sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)'
@@ -35,23 +35,14 @@ def informGroupMembers(grpid,memberid,action,BOSS):
 	message = struct.pack('!III',action,grpid,memberid)
 	#sock.settimeout(3)
 
-	Flag = False
 	for member in groups_dict[grpid]:
-		if Flag==False and BOSS == True and member != memberid:
-			Flag = True
-			message = message = struct.pack('!III?',action,grpid,memberid,True)
-		else:
-			message = struct.pack('!III?',action,grpid,memberid,False)
-
 		sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM) #not optimal
 		(ip,port) = groups_dict[grpid][member]
 		print(ip,port)
 		sock.connect((ip,port))
-
 		sock.send(message) 
 		sock.recv(1024) #wait for ack , send again after timeout
 		sock.close()
-		
 
 def ackTonewmember(grpid):
 	numofmembers = len(groups_dict[grpid])
@@ -71,8 +62,7 @@ def joinToGroup(grpname,addr,port,memberid):
 			ack_msg = struct.pack('!I',-1)# id iparxei, vres allo		+
 			return ack_msg
 		else:
-			boss=False
-			informGroupMembers(grpid,memberid,JOIN,boss) #inform other members, receive acks
+			informGroupMembers(grpid,memberid,JOIN) #inform other members, receive acks
 			groups_dict[grpid][memberid] = (addr,port)
 			ack_msg = ackTonewmember(grpid) #return ack to new member
 			return ack_msg
@@ -84,7 +74,7 @@ def joinToGroup(grpname,addr,port,memberid):
 		ack_msg = struct.pack('!II',1,grp_port)#1 = group members		
 		return ack_msg
 
-def leaveGroup(grpid,memberid,BOSS):
+def leaveGroup(grpid,memberid):
 	global LEAVE
 
 	#grpid = groups_names[grpname]
@@ -99,7 +89,7 @@ def leaveGroup(grpid,memberid,BOSS):
 				break
 		del groups_names[keytoDel]
 	else:
-		informGroupMembers(grpid,memberid,LEAVE,BOSS)
+		informGroupMembers(grpid,memberid,LEAVE)
 		del groups_dict[grpid][memberid]
 		
 	ack_msg = struct.pack('!b',1)
@@ -124,8 +114,8 @@ def TcpCommunication():
 				message = joinToGroup(grpid,addr,tcp_port,memberid)
 				conn.send(message)
 			elif key  == LEAVE: 
-				(grpid,memberid,BOSS) = struct.unpack('!II?',data)
-				message = leaveGroup(grpid,memberid,BOSS)
+				(grpid,memberid) = struct.unpack('!II',data)
+				message = leaveGroup(grpid,memberid)
 				conn.send(message)
 			conn.close()
 		except socket.timeout:
