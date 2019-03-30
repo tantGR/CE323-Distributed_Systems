@@ -12,16 +12,17 @@ APP_MSG = 21  # message from another member      mw->app
 JOIN = 6
 LEAVE = 9
 
-def Send():
+def Send(k):
 	global gsock
-	while True:
+	while k>0:
 		try:
-			message = input()
+			message=str(k)#message = input()
 			message = message.encode()
 			res = mw.grp_send(gsock,message,len(message))
 		except EOFError:
 			sleep(1000)
 		else:
+			k=k-1
 			continue
 def Receive():
 	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
@@ -47,11 +48,11 @@ class MyThread(threading.Thread):
 	def run(self):
 		self._funcToRun(*self._args)
 
-def main(duration):
+def main(duration,k):
 	global gsock
 
 	gsock = mw.grp_join(0,manager_ip,manager_port,ID)
-	Thr1 = MyThread(Send,1,"Send")
+	Thr1 = MyThread(Send,1,"Send",k)
 	Thr2 = MyThread(Receive,2,"Receive")
 	Thr1.setDaemon(True)
 	Thr2.setDaemon(True)
@@ -63,4 +64,5 @@ def main(duration):
 
 if __name__ == "__main__":
 	duration = int(sys.argv[1])
-main(duration)
+	k = int(sys.argv[2])
+main(duration,k)
