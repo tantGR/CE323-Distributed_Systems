@@ -15,10 +15,14 @@ LEAVE = 9
 def Send():
 	global gsock
 	while True:
-		message = input()
-		message = message.encode()
-		res = mw.grp_send(gsock,message,len(message))
-
+		try:
+			message = input()
+			message = message.encode()
+			res = mw.grp_send(gsock,message,len(message))
+		except EOFError:
+			sleep(1000)
+		else:
+			continue
 def Receive():
 	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
 
