@@ -193,7 +193,7 @@ def Receiver(port):
 				if msgID in msgs_to_send:   #if it is mine send again
 					[mtype,grp,len,msg,sent,with_ack,timeout] = msgs_to_send[msgID]
 					message = struct.pack('!IIII',mtype,msgID,len,MY_ID)+msg
-					sock.sendto(message,addr)
+					sock.sendto(message,(multicast_addr,port))
 					#print("LOSS")
 			elif type == SEQ_NUM:
 				#print("\t",len)
@@ -212,7 +212,7 @@ def Receiver(port):
 						block_rcv.release()
 
 				if received_seq > (last_seq_num + 1) and last_seq_num != -1:
-					print("\t\t",last_seq_num, received_seq)
+					#print("\t\t",last_seq_num, received_seq)
 					message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
 					sock.sendto(message,(multicast_addr,port))
 
@@ -233,7 +233,7 @@ def Receiver(port):
 				for m in received_msgs:
 					if received_msgs[m][2] in range(last+1,received+1):
 						message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
-						sock.sendto(message,addr)
+						sock.sendto(message,(multicast_addr,port))
 		if (time.time() - start_time) >= 10:
 			print("TIMEOUT")
 			check_for_losses(port,last_seq_num,sock)
