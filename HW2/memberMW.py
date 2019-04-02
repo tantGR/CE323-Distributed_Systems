@@ -204,7 +204,7 @@ def Receiver(port):
 					received_msgs[msgID] = [0,"",received_seq,0]
 					message = struct.pack('!IIII',MSG_LOSS,msgID,len,MY_ID)+"".encode()
 					sock.sendto(message,(multicast_addr,port))
-					print("\t\tMSG_LOSS")
+					#print("\t\tMSG_LOSS")
 				else:                 #if message received earlier
 					if msgID > 0:
 						received_msgs[msgID][2] = received_seq
@@ -215,7 +215,7 @@ def Receiver(port):
 					#print("\t\t",last_seq_num, received_seq)
 					message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,received_seq,MY_ID)+"".encode()
 					sock.sendto(message,(multicast_addr,port))
-					print("\t\tSEQ_LOSS")
+					#print("\t\tSEQ_LOSS")
 
 			elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
 				#print("CURR_SEQ")
