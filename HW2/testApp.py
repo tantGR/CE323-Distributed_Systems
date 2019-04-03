@@ -11,10 +11,14 @@ GRP_CHANGE = 12 #message for changes in group - mw->app
 APP_MSG = 21  # message from another member      mw->app
 JOIN = 6
 LEAVE = 9
-
+start_time=0
+SENDER = False
 def Send(k):
-	global gsock
+	global gsock,start_time
+
+	start_time = time.time()
 	while k>=0:
+		SENDER = True
 		try:
 			message=str(k)#message = input()
 			message = message.encode()
@@ -26,7 +30,10 @@ def Send(k):
 			continue
 def Receive():
 	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
+	global start_time
 	count = 0
+	recv_time = 0
+	c = 0
 	while True:
 		type,member,key,msg = mw.grp_recv(gsock,False)
 		if type == GRP_CHANGE:
@@ -36,14 +43,25 @@ def Receive():
 				print(member,"joined group")
 		elif type == APP_MSG:
 			msg = msg.decode()
-			print("[",member,"] ",msg)
+			#print("[",member,"] ",msg)
 			count = count+1
 			if msg == "0":
-				msg = "received "+str(count)+"messages"
+				sent_count = mw.getSendCounter()
+				msg = "received "+str(count)+"messages "
+				print("Packets sent:"+str(sent_count))
 				length=len(msg)
 				msg=msg.encode()
-				mw.grp_send(gsock,msg,length)
-
+				mw.grp_send( gsock,msg,length)
+			if count == 1000:
+				msg = "ALL RECEIVED"
+				print(msg)
+				mw.grp_send(gsock,msg,len(msg))
+			if msg == "ALL RECEIVED" and SENDER:
+				recv_time += time.time() 
+				c += 1
+				print("[",member,"] ",msg)
+			if c == 2:
+				print(recv_time/c)
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
 		threading.Thread.__init__(self)
