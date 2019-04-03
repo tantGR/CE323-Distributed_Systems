@@ -14,7 +14,7 @@ LEAVE = 9
 
 def Send(k):
 	global gsock
-	while k>0:
+	while k>=0:
 		try:
 			message=str(k)#message = input()
 			message = message.encode()
@@ -26,7 +26,7 @@ def Send(k):
 			continue
 def Receive():
 	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
-
+	count = 0
 	while True:
 		type,member,key,msg = mw.grp_recv(gsock,False)
 		if type == GRP_CHANGE:
@@ -37,6 +37,12 @@ def Receive():
 		elif type == APP_MSG:
 			msg = msg.decode()
 			print("[",member,"] ",msg)
+			count = count+1
+			if msg == "0":
+				msg = "received "+str(count)+"messages"
+				length=len(msg)
+				msg=msg.encode()
+				mw.grp_send(gsock,msg,length)
 
 class MyThread(threading.Thread):
 	def __init__(self, funcToRun, threadID, name, *args):
