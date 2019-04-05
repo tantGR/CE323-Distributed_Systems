@@ -75,13 +75,20 @@ def TcpConnection():
 		data = conn.recv(1024)
 		(key,grpid,member) = struct.unpack('!III',data)
 		ack = struct.pack('!b',1)
-		conn.send(ack)
+		#conn.send(ack)
 		if key == JOIN:
 			groups_dict[grpid].append(member)
 			if BOSS == True:
 					arrival_time[member] = global_seq
 		elif key == LEAVE:
-			groups_dict[grpid].delete(member)
+			#groups_dict[grpid].delete(member)
+			c = 0
+			for m in groups_dict[grpid]:
+				if m == member:	 
+					break
+				c += 1
+			del groups_dict[grpid][c]
+		conn.send(ack)
 		with lists_lock:	
 			msgLists[grpid].append((GRP_CHANGE,member,key,"")) #type,member,length/action,message_data
 class MyThread(threading.Thread):
@@ -97,17 +104,18 @@ class MyThread(threading.Thread):
 def check_for_losses(port,last_seq_num,sock):
 	global MSG_LOSS,SEQ_LOSS,multicast_addr,MY_ID,received_msgs, GROUP_MSG
 	for m in received_msgs:
-		if received_msgs[m][0] == 0:
+		if received_msgs[m][0] == 0 and received_msgs[m][2] != -1:
+			print("\t\tMSG")
 			seq = received_msgs[m][2]
 			message = struct.pack('!IIII',MSG_LOSS,m,seq,MY_ID)+"".encode()
 			sock.sendto(message,(multicast_addr,port))
 		elif received_msgs[m][2] == -1:
-			#print("LLLLOOOSSS")
+			print("\t\tSEQ")
 			message = struct.pack('!IIII',SEQ_LOSS,last_seq_num,last_seq_num+2,MY_ID)+"".encode()
 			sock.sendto(message,(multicast_addr,port))
 
 	print("\t\t\tANYTHING LOST??")
-	#print("\t\t",last_seq_num)
+	print("\t\t",last_seq_num)
 	message = struct.pack('!IIII',GROUP_MSG,0,0,MY_ID) #send the global seq
 	sock.sendto(message,(multicast_addr,port))
 def send_ready_msgs(port,last_seq_num):
@@ -227,6 +235,7 @@ def Receiver(port):
 				elif BOSS == False and type == CURR_SEQ_A and new_in_grp == 1:
 					new_in_grp = 0
 					last_seq_num = len
+					print("last seq: ",last_seq_num)
 			elif type == SEQ_LOSS and BOSS == True:
 				#print ("SEQ_LOSS")
 				last = msgID
