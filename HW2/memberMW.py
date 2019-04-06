@@ -188,8 +188,6 @@ def Receiver(port):
 						received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
 				elif BOSS == True:
 					if msgID == 0: #check for losses - send back global_seq
-						#33 0 (0,) 0
-						print(SEQ_NUM,msgID,global_seq,0)
 						message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
 						sock.sendto(message,(multicast_addr,port))
 					elif msgID in received_msgs:
@@ -265,9 +263,7 @@ def Receiver(port):
 						message = struct.pack("!I",last_seq_num)
 						sock.sendto(message,addr)	
 			elif type == LOADING_CHANGE:
-				print("EKTYPWTHIKEEEEEEEE")
 				received_msgs[msgID]=[len,msgID,len,senderID]
-				#arrival_time
 
 		if (time.time() - start_time) >= 10:
 			#print("TIMEOUT")
@@ -359,7 +355,6 @@ def setNewBoss(grpid):
 		print("No manager found\n")
 		return 
 
-print("to steile")
 
 def grp_leave(gsock):
 	global groups_dict, manager, MY_ID

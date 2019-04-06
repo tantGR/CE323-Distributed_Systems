@@ -14,13 +14,13 @@ LEAVE = 9
 LEFT = False
 
 def Send():
-	global gsock
+	global gsock,LEFT
 	while True:
 		try:
 			message = input()
 			if message == "LEAVE":
-				LEFT = True
 				mw.grp_leave(gsock)
+				LEFT = True
 				break
 			message = message.encode()
 			res = mw.grp_send(gsock,message,len(message))
@@ -29,9 +29,9 @@ def Send():
 		else:
 			continue
 def Receive():
-	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN
+	global gsock, GRP_CHANGE, APP_MSG,LEAVE,JOIN,LEFT
 
-	while not LEFT:
+	while True:
 		type,member,key,msg = mw.grp_recv(gsock,False)
 		if type == GRP_CHANGE:
 			if key == LEAVE:
@@ -56,7 +56,7 @@ class MyThread(threading.Thread):
 		self._funcToRun(*self._args)
 
 def main():
-	global gsock
+	global gsock,LEFT
 
 	gsock = mw.grp_join(0,manager_ip,manager_port,ID)
 	Thr1 = MyThread(Send,1,"Send")
@@ -66,7 +66,7 @@ def main():
 	Thr1.start()
 	Thr2.start()
 	while not LEFT:
-		time.sleep(1000)
+		time.sleep(0)
 
 if __name__ == "__main__":
     main()
