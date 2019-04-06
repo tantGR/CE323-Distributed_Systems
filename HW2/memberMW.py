@@ -34,6 +34,9 @@ msgLists = {}
 BOSS = False
 arrival_time = {}
 global_seq = 0
+NEW_BOSS=4321
+OK=1234
+LOADING_CHANGE=52341
 
 def discoverManager(addr,port):
 	global manager
@@ -141,13 +144,15 @@ def send_ready_msgs(port,last_seq_num):
 def Receiver(port):
 	global multicast_addr, received_msgs, global_seq,msgs_to_send, MY_ID,block_rcv,send_lock,msgLists,BOSS,arrival_time
 	global CURR_SEQ,GROUP_MSG,MSG_LOSS,SEQ_NUM, SEQ_LOSS
+	global OK,NEW_BOSS,LOADING_CHANGE
 	global_seq = 0
 	timeout = 4
 	if BOSS == True:
+		new_in_grp=0
 		last_seq_num = 0
 	else:
 		last_seq_num = -1
-	new_in_grp = 1
+		new_in_grp = 1
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM,socket.IPPROTO_UDP)
 	group = socket.inet_aton(multicast_addr)
@@ -183,6 +188,8 @@ def Receiver(port):
 						received_msgs[msgID] = [len,msg,-1,senderID]#len,data,seq_num,sender
 				elif BOSS == True:
 					if msgID == 0: #check for losses - send back global_seq
+						#33 0 (0,) 0
+						print(SEQ_NUM,msgID,global_seq,0)
 						message = struct.pack('!IIII',SEQ_NUM,msgID,global_seq,0)+"".encode() # send seq_num to group members
 						sock.sendto(message,(multicast_addr,port))
 					elif msgID in received_msgs:
@@ -226,16 +233,16 @@ def Receiver(port):
 					#print("\t\tSEQ_LOSS")
 
 			elif type == CURR_SEQ_Q or type == CURR_SEQ_A:
-				#print("CURR_SEQ")
 				if BOSS == True and type == CURR_SEQ_Q:
 					if senderID in arrival_time:
 						seq = arrival_time[senderID]
+					else:
+						print((type,msgID,len,senderID))	
 					message = struct.pack('!IIII',CURR_SEQ_A,0,seq,MY_ID)+"".encode()
-					sock.sendto(message,(multicast_addr,port))
+					sock.sendto(message,(multicast_addr,port))#reference before assignment
 				elif BOSS == False and type == CURR_SEQ_A and new_in_grp == 1:
 					new_in_grp = 0
 					last_seq_num = len
-					print("last seq: ",last_seq_num)
 			elif type == SEQ_LOSS and BOSS == True:
 				#print ("SEQ_LOSS")
 				last = msgID
@@ -244,6 +251,24 @@ def Receiver(port):
 					if received_msgs[m][2] in range(last+1,received+1):
 						message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],MY_ID)+"".encode()
 						sock.sendto(message,(multicast_addr,port))
+			elif type == NEW_BOSS:
+				if senderID == MY_ID:
+					(global_seq,)=struct.unpack("!I",msg)
+					packetsToReceive = global_seq -last_seq_num#TypeError: unsupported operand type(s) for -: 'tuple' and 'int'
+					if packetsToReceive == 0:
+						#message = struct.pack('!IIII',OK,0,0,groups_dict[grpid][1])#+"".encode() 
+						message = struct.pack('I',OK)
+						sock.sendto(message,addr)
+						BOSS = True
+						print("NEW BOSS")
+					else:
+						message = struct.pack("!I",last_seq_num)
+						sock.sendto(message,addr)	
+			elif type == LOADING_CHANGE:
+				print("EKTYPWTHIKEEEEEEEE")
+				received_msgs[msgID]=[len,msgID,len,senderID]
+				#arrival_time
+
 		if (time.time() - start_time) >= 10:
 			#print("TIMEOUT")
 			check_for_losses(port,last_seq_num,sock)
@@ -302,11 +327,51 @@ def grp_join(name,addr,port,myid):
 	
 	return grp_port
 
+def setNewBoss(grpid):
+	global groups_dict,NEW_BOSS,multicast_addr,OK,global_seq
+	global NEW_BOSS
+	global LOADING_CHANGE
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	sock.settimeout(3)
+	try:
+		message = struct.pack('!IIIII',NEW_BOSS,0,0,groups_dict[grpid][1],global_seq)#+"".encode() 
+		sent = sock.sendto(message,(multicast_addr,grpid))
+		data, address = sock.recvfrom(16)
+
+		(status,) = struct.unpack("!I",data)
+		if status == OK:
+			sock.close()
+			return
+		else:
+			last_seq_num = status		
+			for m in received_msgs:
+				if received_msgs[m][2] in range(last_seq_num+1,global_seq+1):
+					#message = struct.pack('!IIII',SEQ_NUM,m,received_msgs[m][2],groups_dict[grpid][1])+"".encode()
+					message = struct.pack('!IIII',LOADING_CHANGE,m,received_msgs[m][2],groups_dict[grpid][1])+"".encode()
+					sock.sendto(message,(multicast_addr,grpid))
+			sock.recvfrom(16)
+			(status,) = struct.unpack("!I",data)
+			if status == OK:
+				sock.close()
+				return
+
+	except socket.timeout:
+		print("No manager found\n")
+		return 
+
+print("to steile")
+
 def grp_leave(gsock):
 	global groups_dict, manager, MY_ID
+	global BOSS,new_in_grp
+
+	if BOSS==True and len(groups_dict[gsock]) > 1:
+		new_in_grp = 0
+		BOSS=False
+		setNewBoss(gsock)
+
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.connect(manager)
-
 	message = struct.pack('!III',LEAVE,gsock,MY_ID)
 	sock.send(message)
 	sock.recv(1024)

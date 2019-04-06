@@ -1,0 +1,22 @@
+
+*** These modified files were found in JOE when it aborted on Fri Apr  5 01:38:54 2019
+*** JOE was aborted by UNIX signal 1
+
+*** File '(Unnamed)'
+example.txt
+example.txt
+example.txt
+example.txt
+execute.sh
+handler.py
+serverless.yml
+testApp.py
+/home/olympia/.aws/conf
+/home/olympia/.aws/credentials
+/home/olympia/.aws/credentials
+
+*** File '* Startup Log *'
+Processing '/etc/joe/joerc'...
+Processing '/etc/joe/ftyperc'...
+Finished processing /etc/joe/ftyperc
+Finished processing /etc/joe/joerc
