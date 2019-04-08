@@ -261,9 +261,16 @@ def Receiver(port):
 						print("NEW BOSS")
 					else:
 						message = struct.pack("!I",last_seq_num)
-						sock.sendto(message,addr)	
+						sock.sendto(message,addr)
+
 			elif type == LOADING_CHANGE:
 				received_msgs[msgID]=[len,msgID,len,senderID]
+				packetsToReceive -= 1
+				if packetsToReceive==0:
+					message = struct.pack('I',OK)
+					sock.sendto(message,addr)
+					BOSS = True
+					print("NEW BOSS")
 
 		if (time.time() - start_time) >= 10:
 			#print("TIMEOUT")
