@@ -6,6 +6,7 @@ CACHE_SIZE = 0
 VALIDITY = 0
 open_files = {} #[fd,server_code,pos,name,isOpen]
 fds = 0 #local file descriptors
+fds_BOUND = 50
 O_RDONLY = 40
 O_WRONLY = 30
 O_RDWR = 34
@@ -25,11 +26,14 @@ def set_cache(size, validity):
 	VALIDITY = validity
 
 def open(filename, flags):
-	global open_files, fds,O_RDONLY,O_WRONLY,O_RDWR
+	global open_files, fds,O_RDONLY,O_WRONLY,O_RDWR,fds_BOUND
+
+	if len(open_files) >= fds_BOUND:
+		return -5
 
 	fd = fds + 1
 
-	open_files[fd] = [-1,0,filename,False,flags[-1]]
+	open_files[fd] = [-1,0,filename,False,flags[-1]]#server_code,pos,fname,isOpen,flags
 
 	code = rpc.open(filename,flags[:-1])
 	if code != -1:
@@ -49,7 +53,7 @@ def read(fd,nbytes):
 	fid = open_files[fd][0]
 	curr_pos = open_files[fd][1]
 
-	buf,bytes_read = rpc.read(fid,curr_pos,nbytes)
+	bytes_read,buf = rpc.read(fid,curr_pos,nbytes)
 
 	if bytes_read == -1:
 		#print("Error in read")

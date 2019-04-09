@@ -28,10 +28,12 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 			elif f == O_TRUNC:
 				flag += "t"
 		print(flag)
+		fid = fid.encode()
+		flag = flag.encode()
 		message = struct.pack('!Iss',type,fid,flag)
 		sock.sendto(message,server_addr)
 		data = sock.recv(1024)
-		(file_code,) = struct.unpack('!I',data)
+		(file_code,) = struct.unpack('!i',data)
 
 		return file_code
 	elif type == READ:
@@ -46,7 +48,7 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 		message = struct.pack('!IIII',type,fid,pos,len) + buf
 		sock.sendto(message,server_addr)
 		data = sock.recv(1024)
-		(bytes_written,) = struct.unpack('!I',data)
+		(bytes_written,) = struct.unpack('!i',data)
 
 		return  bytes_written
 
