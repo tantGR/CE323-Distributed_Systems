@@ -14,7 +14,7 @@ O_EXCL = 21
 O_TRUNC = 22
 EEXIST = -2
 open_files = {}
-files_BOUND = 30
+files_BOUND = 0#30
 file_codes = {}
 codes = 0
 
@@ -22,9 +22,12 @@ codes = 0
 def serve_open(request):
 	global O_CREAT,O_EXCL,O_TRUNC,open_files,file_codes,codes,EEXIST
 
-	(fname,flag) = struct.unpack('!ss',request)
-	fname = fname.decode()
+	#(flag,) = struct.unpack('!s',request[:3])
+	flag = request[:3]
 	flag = flag.decode()
+	fname = request[3:]
+	fname = fname.decode()
+	
 
 	if fname not in open_files:
 		if 'x' in flag:
@@ -54,6 +57,7 @@ def serve_open(request):
 		file_codes[codes] = fd
 		return codes
 	else:
+		open_files[fname][1] = time.time()
 		for f in file_codes:
 			if file_codes[f] == open_files[fname][0]:
 				code = f 
@@ -79,7 +83,11 @@ def serve_read(request):
 	fd = file_codes[fid]
 	os.lseek(fd,pos,os.SEEK_SET)
 	buf = os.read(fd,size)
-	#open_files[]
+	for fname in open_files:
+		if fd == open_files[fname][0]:
+			open_files[fname][1] = time.time()
+			break
+	
 	return buf
 
 def serve_write(request):
@@ -94,6 +102,11 @@ def serve_write(request):
 	fd = file_codes[fid]
 	os.lseek(fd,pos,os.SEEK_SET)
 	nbytes = os.write(fd,data)
+	for fname in open_files:
+		if fd == open_files[fname][0]:
+			open_files[fname][1] = time.time()
+			break
+	
 	return nbytes
 
 def garbage_collection():
@@ -101,8 +114,10 @@ def garbage_collection():
 
 	toDel = []
 	toDel1 = []
+	print(open_files)
+
 	for fname in open_files:
-		if time.time() - open_files[fname][1] >= 200:
+		if time.time() - open_files[fname][1] >= 3:#200:
 			toDel.append(fname)
 
 	for f in toDel:
@@ -114,17 +129,24 @@ def garbage_collection():
 
 	for c in toDel1:
 		del file_codes[c]
+	print(open_files)
 
 def main():
 	global IP,PORT, open_files,files_BOUND
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 	sock.bind((IP,PORT))
 	timeout = 10
-
+	sock.settimeout(5)
 	start_time = time.time()
 	while True:
-		(data,addr) = sock.recvfrom(1024)
-			
+		try:
+			(data,addr) = sock.recvfrom(1024)
+		except socket.timeout:
+			if len(open_files) >= files_BOUND:
+				garbage_collection()
+				start_time = time.time()
+			continue
+
 		(type,) = struct.unpack('!I',data[0:4])
 		data = data[4:]
 
@@ -140,6 +162,7 @@ def main():
 
 		sock.sendto(msg,addr)
 
+		print(len(open_files))
 		if time.time() - start_time >= timeout:
 			if len(open_files) >= files_BOUND:
 				garbage_collection()

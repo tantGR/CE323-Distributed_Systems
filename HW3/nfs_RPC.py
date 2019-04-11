@@ -20,17 +20,26 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 
 	if type == OPEN:
 		flag = ""
+		m=0
 		for f in flags:
 			if f == O_CREAT:
 				flag += "c"
+				m += 1
 			elif f == O_EXCL:
 				flag += "x"
+				m += 1
 			elif f == O_TRUNC:
 				flag += "t"
-		print(flag)
+				m += 1
+
+		#m = len(flag)
+		flag += " "*(3-m)
+		print(".",flag,".")
 		fid = fid.encode()
 		flag = flag.encode()
-		message = struct.pack('!Iss',type,fid,flag)
+		print(fid)
+		message = struct.pack('!I',type) + flag + fid
+		print(message)
 		sock.sendto(message,server_addr)
 		data = sock.recv(1024)
 		(file_code,) = struct.unpack('!i',data)
