@@ -3,9 +3,12 @@ import struct
 import socket
 import os
 import time
+import threading
+import errno
 
-IP = "127.0.0.1"
-PORT = 11987
+IP = "224.0.06"
+MCAST_PORT = 11987
+SERVER_PORT = 2019
 OPEN = 5
 READ = 10
 WRITE = 15
@@ -18,7 +21,6 @@ files_BOUND = 0#30
 file_codes = {}
 codes = 0
 
-
 def serve_open(request):
 	global O_CREAT,O_EXCL,O_TRUNC,open_files,file_codes,codes,EEXIST
 
@@ -30,32 +32,33 @@ def serve_open(request):
 	
 
 	if fname not in open_files:
-		if 'x' in flag:
-			if 't' in flag:
-				fd = os.open(fname,os.O_CREAT|os.O_EXCL|os.O_RDWR|os.O_TRUNC) #xct
+		try:
+			if 'x' in flag:
+				if 't' in flag:
+					fd = os.open(fname,os.O_CREAT|os.O_EXCL|os.O_RDWR|os.O_TRUNC) #xct
+				else:
+					fd = os.open(fname,os.O_CREAT|os.O_EXCL|os.O_RDWR)#xc
 			else:
-				fd = os.open(fname,os.O_CREAT|os.O_EXCL|os.O_RDWR)#xc
-
-			if fd == -1:
+				if 'c' in flag:
+					if 't' in flag:
+						fd = os.open(fname,os.O_CREAT|os.O_TRUNC|os.O_RDWR)#ct
+					else:
+						fd = os.open(fname,os.O_CREAT|os.O_RDWR)#c
+				else:
+					if 't' in flag:
+						fd = os.open(fname,os.O_TRUNC|os.O_RDWR)#t
+					else:
+						fd = os.open(fname,os.O_RDWR)#-			
+		except OSError as ex: 		
+			if ex.errno == errno.EEXIST:
 				return EEXIST
-		else:
-			if 'c' in flag:
-				if 't' in flag:
-					fd = os.open(fname,os.O_CREAT|os.O_TRUNC|os.O_RDWR)#ct
-				else:
-					fd = os.open(fname,os.O_CREAT|os.O_RDWR)#c
 			else:
-				if 't' in flag:
-					fd = os.open(fname,os.O_TRUNC|os.O_RDWR)#t
-				else:
-					fd = os.open(fname,os.O_RDWR)#-						
-
-		if fd == -1:
-			return fd
-		open_files[fname] = [fd,time.time()]
-		codes += 1
-		file_codes[codes] = fd
-		return codes
+				return -1
+		else:
+			open_files[fname] = [fd,time.time()]
+			codes += 1
+			file_codes[codes] = fd
+			return codes
 	else:
 		open_files[fname][1] = time.time()
 		for f in file_codes:
@@ -65,9 +68,12 @@ def serve_open(request):
 		if 'x' in flag:
 			return EEXIST
 		elif 't' in flag:
-			
-			os.ftruncate(open_files[fname][0])
-			return code
+			try:
+				os.ftruncate(open_files[fname][0],100)
+			except OSError:
+				return -1
+			else:
+				return code
 		else:
 			return code
 
@@ -82,13 +88,17 @@ def serve_read(request):
 
 	fd = file_codes[fid]
 	os.lseek(fd,pos,os.SEEK_SET)
-	buf = os.read(fd,size)
-	for fname in open_files:
-		if fd == open_files[fname][0]:
-			open_files[fname][1] = time.time()
-			break
+	try:
+		buf = os.read(fd,size)
+	except OSError:
+		return -1
+	else:
+		for fname in open_files:
+			if fd == open_files[fname][0]:
+				open_files[fname][1] = time.time()
+				break
 	
-	return buf
+		return buf
 
 def serve_write(request):
 	global open_files,file_codes
@@ -101,13 +111,17 @@ def serve_write(request):
 
 	fd = file_codes[fid]
 	os.lseek(fd,pos,os.SEEK_SET)
-	nbytes = os.write(fd,data)
-	for fname in open_files:
-		if fd == open_files[fname][0]:
-			open_files[fname][1] = time.time()
-			break
-	
-	return nbytes
+	try:
+		nbytes = os.write(fd,data)
+	except OSERROR:
+		return -1
+	else:
+		for fname in open_files:
+			if fd == open_files[fname][0]:
+				open_files[fname][1] = time.time()
+				break
+		
+		return nbytes
 
 def garbage_collection():
 	global open_files,file_codes,files_BOUND
@@ -131,10 +145,41 @@ def garbage_collection():
 		del file_codes[c]
 	print(open_files)
 
+def UdpDiscover():
+	global IP,MCAST_PORT,sock,SERVER_PORT
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	group = socket.inet_aton(IP)
+	mreq = struct.pack('4sL',group,socket.INADDR_ANY)
+	sock.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,mreq)
+	sock.bind((IP,MCAST_PORT))
+
+	while True:
+		(data, addr) = sock.recvfrom(1024)
+		#print("Found from ", addr)
+
+		message = struct.pack('!I',SERVER_PORT)
+		sock.sendto(message,addr)
+
+class MyThread(threading.Thread):
+    def __init__(self, funcToRun, threadID, name, *args):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self._funcToRun = funcToRun
+        self._args = args#empty
+    def run(self):
+        self._funcToRun(*self._args)
+
 def main():
 	global IP,PORT, open_files,files_BOUND
+
+	Thr1 = MyThread(UdpDiscover,1,"UdpDiscover")
+	Thr1.start()
+
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-	sock.bind((IP,PORT))
+	#ip = sock.getsockname()[0]
+	#print(ip)
+	sock.bind(("",SERVER_PORT))
 	timeout = 10
 	sock.settimeout(5)
 	start_time = time.time()
@@ -155,7 +200,10 @@ def main():
 			msg = struct.pack('!i',code)
 		elif type == READ:
 			buf = serve_read(data)
-			msg = struct.pack('!I',len(buf)) + buf
+			if buf == -1:
+				msg = struct.pack('!i',-1)
+			else:
+				msg = struct.pack('!i',len(buf)) + buf
 		elif type == WRITE:
 			nbytes = serve_write(data)
 			msg = struct.pack('!i',nbytes)

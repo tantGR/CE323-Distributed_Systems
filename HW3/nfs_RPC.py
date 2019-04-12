@@ -49,7 +49,9 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 		message = struct.pack('!IIII',type,fid,pos,len)
 		sock.sendto(message,server_addr)
 		data = sock.recv(1024)
-		(nbytes,) = struct.unpack('!I',data[0:4])
+		(nbytes,) = struct.unpack('!i',data[0:4])
+		if nbytes == -1:
+			return -1,""
 		buf = data[4:]
 
 		return nbytes,buf
@@ -67,11 +69,19 @@ def open(fname, flags):
 
 def read(fid, pos, nbytes):
 
+	if fid <= 0:
+		print("Invalid file descriptor.")
+		return -1,""
+
 	bytes_read,buf = send_to_server(READ,fid,pos,len = nbytes)
 
-	return bytes_read,buf
+	return buf,bytes_read
 
 def write(fid,pos,buf,len):
+
+	if fid <= 0:
+		print("Invalid file descriptor.")
+		return -1
 
 	return send_to_server(WRITE,fid,pos,buf = buf,len = len)
 

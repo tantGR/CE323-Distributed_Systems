@@ -31,11 +31,15 @@ def open(filename, flags):
 	if len(open_files) >= fds_BOUND:
 		return -5
 
+	code = rpc.open(filename,flags[:-1])
+
+	if code < 0:
+		return code
+
 	fd = fds + 1
 
 	open_files[fd] = [-1,0,filename,False,flags[-1]]#server_code,pos,fname,isOpen,flags
 
-	code = rpc.open(filename,flags[:-1])
 	if code != -1:
 		open_files[fd][0] = code 
 		open_files[fd][3] = True
@@ -53,7 +57,7 @@ def read(fd,nbytes):
 	fid = open_files[fd][0]
 	curr_pos = open_files[fd][1]
 
-	bytes_read,buf = rpc.read(fid,curr_pos,nbytes)
+	buf,bytes_read = rpc.read(fid,curr_pos,nbytes)
 
 	if bytes_read == -1:
 		#print("Error in read")
