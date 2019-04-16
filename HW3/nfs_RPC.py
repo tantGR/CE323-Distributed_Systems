@@ -17,6 +17,7 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 	global OPEN,READ,WRITE,server_addr,O_TRUNC,O_EXCL,O_CREAT
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) 
+	sock.settimeout(3)
 
 	if type == OPEN:
 		flag = ""
@@ -37,30 +38,45 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 		print(".",flag,".")
 		fid = fid.encode()
 		flag = flag.encode()
-		print(fid)
 		message = struct.pack('!I',type) + flag + fid
-		print(message)
-		sock.sendto(message,server_addr)
-		data = sock.recv(1024)
-		(file_code,) = struct.unpack('!i',data)
-
+		while True:
+			try:
+				sock.sendto(message,server_addr)
+				data = sock.recv(1024)
+			except socket.timeout:
+				continue
+			else:
+				(file_code,) = struct.unpack('!i',data)
+				break
+		
 		return file_code
 	elif type == READ:
 		message = struct.pack('!IIII',type,fid,pos,len)
-		sock.sendto(message,server_addr)
-		data = sock.recv(1024)
-		(nbytes,) = struct.unpack('!i',data[0:4])
-		if nbytes == -1:
-			return -1,""
-		buf = data[4:]
+		while True:
+			try:
+				sock.sendto(message,server_addr)
+				data = sock.recv(1024)
+			except socket.timeout:
+				continue
+			else:
+				(nbytes,) = struct.unpack('!i',data[0:4])
+				if nbytes == -1:
+					return -1,""
+				buf = data[4:]
+				break
 
 		return nbytes,buf
 	elif type == WRITE:
 		message = struct.pack('!IIII',type,fid,pos,len) + buf
-		sock.sendto(message,server_addr)
-		data = sock.recv(1024)
-		(bytes_written,) = struct.unpack('!i',data)
-
+		while True:
+			try:
+				sock.sendto(message,server_addr)
+				data = sock.recv(1024)
+			except socket.timeout:
+				continue
+			else:
+				(bytes_written,) = struct.unpack('!i',data)
+				break
 		return  bytes_written
 
 def open(fname, flags):

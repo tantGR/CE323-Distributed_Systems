@@ -6,7 +6,7 @@ import time
 import threading
 import errno
 
-IP = "224.0.06"
+IP = "224.0.0.6"
 MCAST_PORT = 11987
 SERVER_PORT = 2019
 OPEN = 5
@@ -129,20 +129,25 @@ def garbage_collection():
 	toDel = []
 	toDel1 = []
 	print(open_files)
+	#print(file_codes)
 
 	for fname in open_files:
-		if time.time() - open_files[fname][1] >= 3:#200:
+		if time.time() - open_files[fname][1] >= 10:#200:
 			toDel.append(fname)
 
 	for f in toDel:
-		fd = open_files[fname][0]
+		fd = open_files[f][0]
 		for c in file_codes:
+			#print(c)
 			if file_codes[c] == fd:
 				toDel1.append(c)
 		del open_files[f]
+	toDel = []	
 
 	for c in toDel1:
 		del file_codes[c]
+
+	toDel1 = []
 	print(open_files)
 
 def UdpDiscover():
@@ -180,12 +185,12 @@ def main():
 	#ip = sock.getsockname()[0]
 	#print(ip)
 	sock.bind(("",SERVER_PORT))
-	timeout = 10
+	timeout = 30
 	sock.settimeout(5)
 	start_time = time.time()
 	while True:
 		try:
-			(data,addr) = sock.recvfrom(1024)
+			(data,addr) = sock.recvfrom(1060)
 		except socket.timeout:
 			if len(open_files) >= files_BOUND:
 				garbage_collection()
@@ -210,7 +215,7 @@ def main():
 
 		sock.sendto(msg,addr)
 
-		print(len(open_files))
+		#print(len(open_files))
 		if time.time() - start_time >= timeout:
 			if len(open_files) >= files_BOUND:
 				garbage_collection()

@@ -52,7 +52,7 @@ def main():
 	buf = str.encode()
 	bytes = my_nfs.write(fd,buf,len(buf))
 	print(bytes)
-	my_nfs.seek(fd,3,"SEEK_SET")
+	my_nfs.seek(fd,8,"SEEK_END")
 	buf,nbytes = my_nfs.read(fd,7)
 	buf = buf.decode()
 	print(buf,nbytes)
