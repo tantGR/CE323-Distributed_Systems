@@ -2,6 +2,7 @@ import my_nfs
 import socket
 import struct
 import sys
+import os
 
 O_CREAT = 12
 O_EXCL = 21
@@ -41,21 +42,28 @@ def DiscoverServer():
 def main():
 	ip,port = DiscoverServer()
 	my_nfs.set_srv_addr(ip,port)
-	fd = my_nfs.open("file.txt",[O_CREAT,O_TRUNC,O_RDWR])
+	my_nfs.set_cache(4,10)
+	fd = my_nfs.open("volos.jpg",[O_RDWR])
 	if fd == -1:
 		print("Open error")
 		return
 	elif fd == -2:
 		print("File exists.")
 		return
-	str = "Ti nea?????????"
-	buf = str.encode()
-	bytes = my_nfs.write(fd,buf,len(buf))
-	print(bytes)
-	my_nfs.seek(fd,8,"SEEK_END")
-	buf,nbytes = my_nfs.read(fd,7)
-	buf = buf.decode()
-	print(buf,nbytes)
+	#bytes = my_nfs.write(fd,buf,len(buf))
+	#print(bytes)
+	#my_nfs.seek(fd,8,"SEEK_END")
+	lfd = os.open("volos.jpg",os.O_CREAT|os.O_TRUNC|os.O_WRONLY)
+	c = 0
+	while True:
+		#c += 1
+		#if c == 5:
+			#my_nfs.seek(fd,100,"SEEK_CUR")
+		buf,nbytes = my_nfs.read(fd,1000)
+		print(nbytes)
+		if nbytes == 0:
+			break
+		os.write(lfd,buf)
 
 if __name__ == "__main__":
     main()

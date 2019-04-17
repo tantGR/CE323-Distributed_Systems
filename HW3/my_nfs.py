@@ -1,4 +1,5 @@
 import nfs_RPC as rpc
+import time
 
 server_ip = ""
 server_port = 0
@@ -11,7 +12,7 @@ O_RDONLY = 40
 O_WRONLY = 30
 O_RDWR = 34
 cache_keys = []
-block_size = 512
+block_size = 1024
 cache = {}
 
 def set_srv_addr(ip, port):
@@ -23,11 +24,11 @@ def set_srv_addr(ip, port):
 	rpc.set_server_addr(server_ip,server_port)
 
 def set_cache(size, validity):
-	global CACHE_SIZE, VALIDITY
+	global CACHE_SIZE, VALIDITY,cache_keys,block_size
 
 	CACHE_SIZE = size*1024
 	VALIDITY = validity
-	cache_keys = [i for i in range(size/block_size)]
+	cache_keys = [i for i in range(CACHE_SIZE//block_size)]
 
 def open(filename, flags):
 	global open_files, fds,O_RDONLY,O_WRONLY,O_RDWR,fds_BOUND
@@ -52,37 +53,53 @@ def open(filename, flags):
 	return fd	
 
 def searchCache(fid,pos,nbytes):
-	global cache_keys,CACHE_SIZE,cache,validity,block_size
+	global cache_keys,CACHE_SIZE,cache,VALIDITY,block_size
 
 	missing_blocks = []
 	needed_blocks = []
 	found_blocks = []
 
-	for i in range(pos,nbytes,block_size+):
-		needed_blocks.append((pos // block_size)*block_size)
+	first = (pos//block_size)
+	last = ((pos+nbytes)//block_size)
+	for i in range(first,last+1):
+		needed_blocks.append(i*block_size)
+	
+		
+
+	print(needed_blocks)
+	start = needed_blocks[0]
 
 	key = -1
+	buf = b''
 	for k in cache:
 		if cache[k][0] == fid:
-			if time.time() - cache[k][3] > validity:
+			if time.time() - cache[k][3] > VALIDITY:
 				cache_keys.append(k)
+				cache[k][4] = False
 			else:
-				if cache[k][1] in needed_blocks:
-					found_blocks.append(k)
-		
-				
-
-	return "",-1,-1
+				c = 0
+				if cache[k][1] in needed_blocks and cache[k][4] == True:
+					found_blocks.append(cache[k][1])
+					if cache[k][1] == needed_blocks[c]:
+						c += 1
+						buf += cache[k][2] 
+	
+	for b in needed_blocks:
+		if b not in found_blocks:
+			missing_blocks.append(b)				
+	print(missing_blocks)
+	return buf,start,len(buf),missing_blocks
 
 def addtoCache(fid,pos,buf,timestamp):
-	global cache_keys,CACHE_SIZE,cache,validity
+	global cache_keys,CACHE_SIZE,cache,VALIDITY
 
 	if len(cache_keys) == 0:
 		curr_time = time.time()
 		max_time = curr_time - cache[0][3]
 		key = 0
 		for k in cache:
-			if curr_time - cache[k][3] > validity:
+			if curr_time - cache[k][3] > VALIDITY:
+				cache[k][4] = False
 				cache_keys.append(k)
 				key = -1
 			if key != -1 and curr_time - cache[k][3] > max_time:
@@ -93,7 +110,7 @@ def addtoCache(fid,pos,buf,timestamp):
 
 	key = cache_keys[0]
 	del cache_keys[0]
-	cache[key] = [fid,pos,buf,timestamp]
+	cache[key] = [fid,pos,buf,timestamp,True]
 
 def read(fd,nbytes):
 	global open_files,O_WRONLY, block_size,cache,cache_keys
@@ -107,62 +124,53 @@ def read(fd,nbytes):
 	curr_pos = open_files[fd][1]
 	pos_to_read = curr_pos
 
-	buf,pos,bytes_read,missing_blocks = searchCache(fid,curr_pos,nbytes)
-	#buf,bytes_read = rpc.read(fid,curr_pos,block_size)
-		
-	if bytes_read == nbytes:
-		#ok
-	#elif bytes_read == -1:
-	#	missing = True
-	#	while missing==True:
-	#		if curr_pos < block_size:
-	#			start = 0
-	#		else:
-	#			start = (curr_pos // block_size) * block_size
-	#		buf,bytes_read = rpc.read(fid,start,block_size)#nothing in cache
-	#		addtoCache(fid,start,buf,time.time())
-	#		if curr_pos + nbytes <= start + bytes_read:
-	#			missing = False
-	#		else:
-	#			curr_pos = start+bytes_read
-	else:
-		for b in missing_blocks:
-			start = b * block_size
-			buf,bytes_read = rpc.read(fid,start,block_size)
-			addtoCache(fid,start,buf,time.time())
+	buf,start,buf_len,missing_blocks = searchCache(fid,curr_pos,nbytes)
+			
+	if missing_blocks == [] and buf_len > 0:
+		s = curr_pos - start
+		e = s + nbytes
+		buf = buf[s:e]
+		bytes_read = len(buf)
 
-	buf,pos,bytes_read = searchCache(fid,pos_to_read,nbytes)
-
-		#missing_blocks = buf
-		#if pos > curr_pos:
-		#	missing = True
-		#	tmp = curr_pos
-		#	while missing:
-		#		start = (tmp // block_size) * block_size
-		#		buf,bytes_read = rpc.read(fid,start,block_size)
-		#		addtoCache(fid,start,buf,time.time())
-		#		if tmp < start:
-		#			tmp = start
-
-		#if curr_pos+nbytes > pos+bytes_read:
-		#	missing = True
-		#	tmp = curr_pos
-		#	while missing:
-		#		start = ((tmp // block_size) + 1) * block_size
-		#		buf,bytes_read = rpc.read(fid,start,block_size)
-		#		addtoCache(fid,start,buf,time.time())
-
-
-	if bytes_read == -1:
-		#print("Error in read")
-		return -1,-1
-	elif bytes_read == 0:
-		#print("EOF")
-		return -1,0
-	else:
 		open_files[fd][1] += bytes_read
-		return buf,bytes_read
+		return buf,bytes_read	
+	elif buf_len > 0:
+		s = curr_pos - start
+		buf = buf[s:]
+		bytes_read = len(buf)
 
+		if len(missing_blocks) > 0:
+			needed_bytes = nbytes - bytes_read
+			next_block = missing_blocks[0]
+			tmp_buf,bytes_read = rpc.read(fid,next_block,block_size)
+			if bytes_read > 0:
+				addtoCache(fid,next_block,tmp_buf,time.time())
+				if block_size > needed_bytes:
+					buf += tmp_buf[:needed_bytes]
+				else:
+					buf += tmp_buf
+
+		bytes_read = len(buf)		
+		open_files[fd][1] += bytes_read
+		return buf,bytes_read	
+
+	else:
+		start = (curr_pos//block_size) * block_size
+		buf,bytes_read = rpc.read(fid,start,block_size)
+		if bytes_read == 0:
+			return -1,0
+		elif bytes_read == -1:
+			return -1,-1
+		else:
+			addtoCache(fid,start,buf,time.time())
+			s = curr_pos - start
+			e = s + nbytes
+			buf = buf[s:e]
+			bytes_read = len(buf)
+
+			open_files[fd][1] += bytes_read
+			return buf,bytes_read	
+		
 def write(fd,buf,nbytes):
 	global open_files,O_RDONLY
 
@@ -205,3 +213,5 @@ def close(fd):
 
 
 # seek negative pos (handle in server)
+#use cache in write
+#multithreading 

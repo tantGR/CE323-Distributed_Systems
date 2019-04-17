@@ -35,7 +35,6 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 
 		#m = len(flag)
 		flag += " "*(3-m)
-		print(".",flag,".")
 		fid = fid.encode()
 		flag = flag.encode()
 		message = struct.pack('!I',type) + flag + fid
@@ -55,7 +54,7 @@ def send_to_server(type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file descripto
 		while True:
 			try:
 				sock.sendto(message,server_addr)
-				data = sock.recv(1024)
+				data = sock.recv(1080)
 			except socket.timeout:
 				continue
 			else:
