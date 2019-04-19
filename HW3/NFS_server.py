@@ -20,6 +20,7 @@ open_files = {}
 files_BOUND = 0#30
 file_codes = {}
 codes = 0
+incarnation_number = -1
 
 def serve_open(request):
 	global O_CREAT,O_EXCL,O_TRUNC,open_files,file_codes,codes,EEXIST
@@ -79,15 +80,20 @@ def serve_open(request):
 
 
 def serve_read(request):
-	global open_files,file_codes
+	global open_files,file_codes,incarnation_number
 
-	(fid,pos,size) = struct.unpack('!III',request)
+	(incarn,fid,pos,size) = struct.unpack('!IIiI',request)
 
+	if incarn < incarnation_number:
+		return -5
 	if fid not in file_codes:
 		return -1	
 
 	fd = file_codes[fid]
-	os.lseek(fd,pos,os.SEEK_SET)
+	if pos < 0:
+		os.lseek(fd,0,os.SEEK_SET)
+	else:
+		os.lseek(fd,pos,os.SEEK_SET)
 	try:
 		buf = os.read(fd,size)
 	except OSError:
@@ -101,11 +107,13 @@ def serve_read(request):
 		return buf
 
 def serve_write(request):
-	global open_files,file_codes
+	global open_files,file_codes,incarnation_number
 
-	(fid,pos,size) = struct.unpack('!III',request[0:12])
-	data = request[12:]
+	(incarn,fid,pos,size) = struct.unpack('!IIII',request[0:16])
+	data = request[16:]
 
+	if incarn < incarnation_number:
+		return -5
 	if fid not in file_codes:
 		return -1	
 
@@ -175,11 +183,28 @@ class MyThread(threading.Thread):
     def run(self):
         self._funcToRun(*self._args)
 
+def new_incarnation():
+	global incarnation_number
+
+	if os.path.exists("incarnation_number"):
+		with open("incarnation_number",'r+') as f:
+			num = int(f.readline())
+			incarnation_number = num+1
+			f.seek(0,0)
+			f.write(str(incarnation_number)+'\n')
+	else:
+		with open("incarnation_number",'w') as f:
+			incarnation_number = 1
+			f.write(str(incarnation_number)+'\n')
+
+	f.close()
 def main():
-	global IP,PORT, open_files,files_BOUND
+	global IP,PORT, open_files,files_BOUND,incarnation_number
 
 	Thr1 = MyThread(UdpDiscover,1,"UdpDiscover")
 	Thr1.start()
+
+	incarnation = new_incarnation()
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 	#ip = sock.getsockname()[0]
@@ -197,21 +222,21 @@ def main():
 				start_time = time.time()
 			continue
 
-		(type,) = struct.unpack('!I',data[0:4])
-		data = data[4:]
+		(req_id,type,) = struct.unpack('!II',data[0:8])
+		data = data[8:]
 
 		if type == OPEN:
 			code = serve_open(data)
-			msg = struct.pack('!i',code)
+			msg = struct.pack('!IiI',req_id,code,incarnation_number)
 		elif type == READ:
 			buf = serve_read(data)
-			if buf == -1:
-				msg = struct.pack('!i',-1)
+			if buf == -1 or buf == -5:
+				msg = struct.pack('!Ii',req_id,buf)
 			else:
-				msg = struct.pack('!i',len(buf)) + buf
+				msg = struct.pack('!Ii',req_id,len(buf)) + buf
 		elif type == WRITE:
 			nbytes = serve_write(data)
-			msg = struct.pack('!i',nbytes)
+			msg = struct.pack('!Ii',req_id,nbytes)
 
 		sock.sendto(msg,addr)
 

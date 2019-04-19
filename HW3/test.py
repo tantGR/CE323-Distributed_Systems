@@ -3,6 +3,7 @@ import socket
 import struct
 import sys
 import os
+import time
 
 O_CREAT = 12
 O_EXCL = 21
@@ -43,7 +44,7 @@ def main():
 	ip,port = DiscoverServer()
 	my_nfs.set_srv_addr(ip,port)
 	my_nfs.set_cache(4,10)
-	fd = my_nfs.open("volos.jpg",[O_RDWR])
+	fd = my_nfs.open("a.txt",[O_RDWR])
 	if fd == -1:
 		print("Open error")
 		return
@@ -53,13 +54,18 @@ def main():
 	#bytes = my_nfs.write(fd,buf,len(buf))
 	#print(bytes)
 	#my_nfs.seek(fd,8,"SEEK_END")
-	lfd = os.open("volos.jpg",os.O_CREAT|os.O_TRUNC|os.O_WRONLY)
-	c = 0
+	lfd = os.open("hello.txt",os.O_CREAT|os.O_TRUNC|os.O_WRONLY)
+	#c = 1
+	# time.sleep(5)
+	my_nfs.seek(fd,-10,"SEEK_END")
 	while True:
 		#c += 1
 		#if c == 5:
 			#my_nfs.seek(fd,100,"SEEK_CUR")
-		buf,nbytes = my_nfs.read(fd,1000)
+		buf,nbytes = my_nfs.read(fd,1)
+		res = my_nfs.seek(fd,-2,"SEEK_CUR")
+		if res == -1:
+			print("Out of file bounds")
 		print(nbytes)
 		if nbytes == 0:
 			break
