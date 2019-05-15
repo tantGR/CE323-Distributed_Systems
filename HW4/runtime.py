@@ -6,7 +6,7 @@ READY = 10
 RUN = 15
 SLEEP = 20
 DEAD = 25
-prog_id = os.getpid() 
+team_id = os.getpid()
 running_progs = {} #id:prog_info
 threads_list = []
 empty_list = threading.Semaphore(0)
@@ -31,17 +31,26 @@ def run_prog():
 	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY
 
 	c = -1
+	#k = -1
 	while True:
 		c += 1
+		#k += 1
+		#if k >= len(threads_list[c]):
+			#c = 0
+		#	c += 1
+		#	k = 0
 		if c >= len(threads_list):
 			c = 0
+		#	k = 0
 		if threads_list == []:
 			empty_list.acquire()
 			c=0
+		#	k = 0
+		#prog = (c)
 		prog = threads_list[c]
-
 		if running_progs[prog][8] == DEAD:
 			del running_progs[prog]
+			#(t,p) = prog
 			del threads_list[c]
 			continue
 
@@ -65,7 +74,8 @@ def run_prog():
 			running_progs[prog][:3] = [name,fd,pcount]
 			res = run_command(command,prog)
 			if res == ERROR:
-				print("Error in prog: ",prog)
+				(t,p) = prog
+				print("Error in prog,",p,"of team",t)
 				running_progs[prog][1].close()
 				running_progs[prog][8] = DEAD
 				#del threads_list[c]
@@ -180,7 +190,8 @@ def run_command(cmd,prog):
 		sleeping = int(arg1)*2000
 		res = SLEEP
 	elif cmd[k] == "PRN":
-		#	print("[",prog,"]:")
+		t,p = prog
+		print("[",t,"]:","[",p,"]:")
 		#print(cmd)
 		for a in cmd[k+1:]:
 			if a[0] == '$':
@@ -210,34 +221,42 @@ class MyThread(threading.Thread):
         self._funcToRun(*self._args)
 
 def main():
-	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD
+	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id
 
 	Thr1 = MyThread(run_prog,1,"run_prog")
 	Thr1.start()
 
 	while True:
 		runtime_cmd = input()
-		runtime_cmd = runtime_cmd.split()
-		cmd = runtime_cmd[0]
+		runtime_cmd = runtime_cmd.split("||")
+		#if len(runtime_cmd) == 1:
+		#	cmd = runtime_cmd.
+		#else: 
+		cmd = runtime_cmd[0].split()[0]
 		if cmd == "run":
-			prog_id = prog_id + 1
-			argv = runtime_cmd[1:]
-			name = argv[0]
-			argc = len(argv)
-			labels = {}
-			pvars = {}
-			sleeping = 0
-			state = READY
-			threads_list.append(prog_id)
-			pvars["$argc"] = argc
-			for i in range(0,argc):
-				tmp = "$arg" + str(i)
-				pvars[tmp] = argv[i]
-			running_progs[prog_id] = [name,-1,0,argc,argv,labels,pvars,sleeping,state] #prog_info = [name,fd,pcount,argc,argv,labels,pvars]
+			team_id += 1
+			id = -1
+		#	threads_list[team_id] = []
+			for r in runtime_cmd:
+				r = r.split()
+				id += 1
+				argv = r[1:]
+				name = argv[0]
+				argc = len(argv)
+				labels = {}
+				pvars = {}
+				sleeping = 0
+				state = READY
+				threads_list.append((team_id,id))
+				pvars["$argc"] = argc
+				for i in range(0,argc):
+					tmp = "$arg" + str(i)
+					pvars[tmp] = argv[i]
+				running_progs[(team_id,id)] = [name,-1,0,argc,argv,labels,pvars,sleeping,state] #prog_info = [name,fd,pcount,argc,argv,labels,pvars]
 			if len(threads_list) == 1:
 				empty_list.release()
 		elif cmd == "list":
-			print("ID\t\tNAME\t\tSTATE\t\t")
+			print("TEAM\t\tTHREAD\t\tNAME\t\tSTATE\t\t")
 			for p in running_progs:
 				if running_progs[p][8] == SLEEP:
 					state = "SLEEPING"
@@ -247,13 +266,15 @@ def main():
 					state = "READY"
 				elif running_progs[p][8] == DEAD:
 					state = "DEAD"
-				print(p,"\t\t",running_progs[p][0],"\t\t",state)
+				(team,prog) = p
+				print(team,"\t\t",prog,"\t\t",running_progs[p][0],"\t\t",state)
 		elif cmd == "kill":
-				thr_id = int(runtime_cmd[1])
-				print(threads_list,running_progs)
-				if thr_id in threads_list:
+				team_id = int(runtime_cmd[0].split()[1])
+				thr_id = int(runtime_cmd[0].split()[2])
+				key = (team_id,thr_id)
+				if key in threads_list:
 					print("Killed")
-					running_progs[thr_id][8] = DEAD
+					running_progs[key][8] = DEAD
 				else:
 					print("Thread not found")
 		else:
