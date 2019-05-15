@@ -66,7 +66,7 @@ def searchCache(fid,pos,nbytes):
 	
 		
 
-	print(needed_blocks)
+	#print(needed_blocks)
 	start = needed_blocks[0]
 
 	key = -1
@@ -87,7 +87,7 @@ def searchCache(fid,pos,nbytes):
 	for b in needed_blocks:
 		if b not in found_blocks:
 			missing_blocks.append(b)				
-	print(missing_blocks)
+	print(needed_blocks,"---",missing_blocks)
 	return buf,start,len(buf),missing_blocks,found_blocks
 
 def addtoCache(fid,pos,buf,timestamp):
@@ -98,6 +98,7 @@ def addtoCache(fid,pos,buf,timestamp):
 		max_time = curr_time - cache[0][3]
 		key = 0
 		for k in cache:
+			curr_time = time.time()
 			if curr_time - cache[k][3] > VALIDITY:
 				cache[k][4] = False
 				cache_keys.append(k)
@@ -132,21 +133,19 @@ def read(fd,nbytes):
 	global open_files,O_WRONLY, block_size,cache,cache_keys
 
 	if fd not in open_files:
-		return -1
+		return "",-1
 	elif open_files[fd][4] == O_WRONLY:
-		return -2
+		return "",-2
 
 	fid = open_files[fd][0]
 	curr_pos = open_files[fd][1]
 	pos_to_read = curr_pos
-
-	print("--",curr_pos)
+	print(curr_pos)
 	missing_blocks = []
 	if curr_pos>=0:
 		buf,start,buf_len,missing_blocks,found = searchCache(fid,curr_pos,nbytes)
 			
 	if curr_pos >= 0 and missing_blocks == [] and buf_len > 0:
-		print("@@@")
 		s = curr_pos - start
 		e = s + nbytes
 		buf = buf[s:e]
@@ -155,7 +154,6 @@ def read(fd,nbytes):
 		open_files[fd][1] += bytes_read
 		return buf,bytes_read	
 	elif curr_pos >= 0 and buf_len > 0:
-		print("###")
 		s = curr_pos - start
 		buf = buf[s:]
 		bytes_read = len(buf)
@@ -182,14 +180,13 @@ def read(fd,nbytes):
 		return buf,bytes_read	
 
 	else:
-		print("&&&")
 		if curr_pos >= 0:
 			start = (curr_pos//block_size) * block_size
 		else:
 			start  = 0 - block_size
 			# print(start)
 		flag = True
-		while start < curr_pos and flag == True:
+		while curr_pos>=0 or (curr_pos<0 and start < curr_pos) and flag == True:
 			if curr_pos>=0:
 				flag = False
 			while True:
@@ -200,19 +197,18 @@ def read(fd,nbytes):
 					return -1,-1
 				elif bytes_read == -5:
 					open_again(fd)
+					continue
 				else:
 					addtoCache(fid,abs(start),buf,time.time())
 					if curr_pos>=0:
-						s = curr_pos - abs(start)
+						s = curr_pos - start
 						e = s + nbytes
 						buf = buf[s:e]
 						bytes_read = len(buf)
 					else:
-						print(buf)
 						size = len(buf)
 						buf = buf[size+curr_pos:size+curr_pos+nbytes]
 						bytes_read = len(buf)
-						print(buf)
 
 					open_files[fd][1] += bytes_read
 					return buf,bytes_read	
@@ -271,10 +267,4 @@ def close(fd):
 		return -1
 
 
-# seek negative pos (handle in server)--------(done - not tested)
-#use cache in write
-#multithreading 
-#server death --------------------------------(done - working)
-#at least once, protocols
-#many_clients/files
-#same message multiple times
+

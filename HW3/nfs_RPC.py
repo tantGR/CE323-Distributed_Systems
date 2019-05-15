@@ -55,7 +55,7 @@ def send_to_server(incarn,type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file de
 				(id,file_code,incarn_num) = struct.unpack('!IiI',data)
 				if id != req_id:
 					f = 1
-					print("\t\thi!!!")
+					print("\t\twrong ans")
 					continue
 				else:
 					break
@@ -77,7 +77,7 @@ def send_to_server(incarn,type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file de
 				(id,nbytes,) = struct.unpack('!Ii',data[0:8])
 				if id != req_id:
 					f = 1
-					print("\t\thi!!!")
+					print("\t\twrong ans")
 					continue
 				if nbytes < 0:
 					return nbytes,""
@@ -100,7 +100,7 @@ def send_to_server(incarn,type,fid,pos=0,flags=-1,buf="",len=-1): #fid = file de
 			else:
 				(id,bytes_written,) = struct.unpack('!Ii',data)
 				if id != req_id:
-					print("\t\thi!!!")
+					print("\t\twrong ans")
 					f = 1
 				break
 		return  bytes_written

@@ -90,8 +90,15 @@ def serve_read(request):
 		return -1	
 
 	fd = file_codes[fid]
+	for fname in open_files:
+		if open_files[fname][0] == fd:
+			break
+	fsize = os.stat(fname).st_size
 	if pos < 0:
-		os.lseek(fd,0,os.SEEK_SET)
+		if fsize < pos:
+			os.lseek(fd,0,os.SEEK_SET)
+		else:
+			os.lseek(fd,pos,os.SEEK_END)
 	else:
 		os.lseek(fd,pos,os.SEEK_SET)
 	try:

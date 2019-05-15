@@ -43,33 +43,36 @@ def DiscoverServer():
 def main():
 	ip,port = DiscoverServer()
 	my_nfs.set_srv_addr(ip,port)
-	my_nfs.set_cache(4,10)
-	fd = my_nfs.open("a.txt",[O_RDWR])
-	if fd == -1:
+	my_nfs.set_cache(10,0.1)
+	print("blocks needed --- blocks not found in cache")
+	fd1 = my_nfs.open("landscape.jpeg",[O_RDWR])
+	if fd1 == -1:
 		print("Open error")
 		return
-	elif fd == -2:
+	elif fd1 == -2:
 		print("File exists.")
 		return
-	#bytes = my_nfs.write(fd,buf,len(buf))
-	#print(bytes)
-	#my_nfs.seek(fd,8,"SEEK_END")
-	lfd = os.open("hello.txt",os.O_CREAT|os.O_TRUNC|os.O_WRONLY)
-	#c = 1
-	# time.sleep(5)
-	my_nfs.seek(fd,-10,"SEEK_END")
+	
+	lfd1 = os.open("landscape.jpeg",os.O_CREAT|os.O_WRONLY)
+
+	b = int(sys.argv[1])
+	s = int(sys.argv[2])
 	while True:
-		#c += 1
-		#if c == 5:
-			#my_nfs.seek(fd,100,"SEEK_CUR")
-		buf,nbytes = my_nfs.read(fd,1)
-		res = my_nfs.seek(fd,-2,"SEEK_CUR")
-		if res == -1:
-			print("Out of file bounds")
-		print(nbytes)
-		if nbytes == 0:
+			
+		buf1,nbytes = my_nfs.read(fd1,b)
+		if s > 0:
+			my_nfs.seek(fd1,(100-len(buf1)),"SEEK_CUR")
+	#	print(nbytes)
+		if nbytes > 0:
+			 os.write(lfd1,buf1)
+			 if s > 0: 
+			 	os.lseek(lfd1,(100-len(buf1)),os.SEEK_CUR)
+		else:
+			print("hi")
 			break
-		os.write(lfd,buf)
+
+			
+		
 
 if __name__ == "__main__":
     main()
