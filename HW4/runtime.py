@@ -98,12 +98,13 @@ def run_prog():
 				running_progs[prog][8] = SLEEP
 				break
 			elif res == BLOCKED:
-				fd.seek(curr_pos,0)
-				print(pcount,fd.tell())
+				running_progs[prog][1].seek(curr_pos,0)
+				print(pcount,running_progs[prog][1].tell())
 				break
 			else:
 				s += 1
 				continue
+		#running_progs[prog][:3] = [name,fd,pcount]
 		if running_progs[prog][8] == RUN:
 			running_progs[prog][8] = READY
 		#threads_list.append(prog)
@@ -245,8 +246,7 @@ def run_command(cmd,prog):
 				state = BLOCKED
 				res = BLOCKED
 			else:
-				if (team,sender) in running_progs:
-					print("HELLO")
+				if (team,sender) in running_progs and running_progs[(team,sender)][8] == BLOCKED:
 					running_progs[(team,sender)][8] = READY
 					del  messages_received[(team,sender,thread)]
 				else:
