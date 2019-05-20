@@ -1,14 +1,19 @@
 import threading
 import os
+import struct
 
-#prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD
+#prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED
 READY = 10
 RUN = 15
 SLEEP = 20
 DEAD = 25
+BLOCKED = 30
+MIGRATRED = 35
 team_id = os.getpid()
 running_progs = {} #id:prog_info
-threads_list = []
+threads_list = [] #{(team,thread):[proginfo]} threads_list[(t,p)] = MIGRATRED
+messages_to_send = {} #{(grp,sender,receiver):msg}
+messages_received = {} #{(grp,sender,receiver):msg}
 empty_list = threading.Semaphore(0)
 Schedule = 5
 NOP = 0
@@ -27,39 +32,38 @@ def searchLabels(fd,prog):
 		if label[0] == "#" and label != "#SIMPLESCRIPT": 
 			running_progs[prog][5][label] = pos
 
+#def sendRPC():
+
+
+#def receiveRPC():
+
+
 def run_prog():
-	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY
+	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED
 
 	c = -1
-	#k = -1
 	while True:
 		c += 1
-		#k += 1
-		#if k >= len(threads_list[c]):
-			#c = 0
-		#	c += 1
-		#	k = 0
 		if c >= len(threads_list):
 			c = 0
-		#	k = 0
 		if threads_list == []:
 			empty_list.acquire()
 			c=0
-		#	k = 0
-		#prog = (c)
 		prog = threads_list[c]
 		if running_progs[prog][8] == DEAD:
 			del running_progs[prog]
 			#(t,p) = prog
 			del threads_list[c]
 			continue
+		if running_progs[prog][8] == BLOCKED:
+				continue
 
 		if running_progs[prog][7] > 0: #sleeping
 			 running_progs[prog][7] -= 1
 			 continue
 		s = 0
 		running_progs[prog][8] = RUN
-		while s < Schedule and running_progs[prog][8] != DEAD:
+		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED :
 			[name,fd,pcount] = running_progs[prog][:3]
 			if fd == -1:
 				fd = open(name,'r')
@@ -67,26 +71,35 @@ def run_prog():
 				fd.seek(0,0)
 			pcount = fd.tell()
 			#fd.seek(pcount,0)
+			curr_pos = pcount
 			command = fd.readline()
 			if len(command) == 0:
 				#threads_list.append(prog)
 				continue
 			running_progs[prog][:3] = [name,fd,pcount]
+			# print(command)
 			res = run_command(command,prog)
 			if res == ERROR:
 				(t,p) = prog
 				print("Error in prog,",p,"of team",t)
 				running_progs[prog][1].close()
 				running_progs[prog][8] = DEAD
-				#del threads_list[c]
+				(t,p) = prog
+				for key in running_progs:
+					(a,b) = key
+					if a == t:
+						running_progs[key][8] = DEAD
 				break
 			elif res == END:
 				running_progs[prog][1].close()
 				running_progs[prog][8] = DEAD
-				#del threads_list[c]
 				break
 			elif res == SLEEP:
 				running_progs[prog][8] = SLEEP
+				break
+			elif res == BLOCKED:
+				fd.seek(curr_pos,0)
+				print(pcount,fd.tell())
 				break
 			else:
 				s += 1
@@ -97,7 +110,7 @@ def run_prog():
 
 
 def run_command(cmd,prog):
-	global OK,END,ERROR,NOP,SLEEP
+	global OK,END,ERROR,NOP,SLEEP,BLOCKED,messages_received,messages_to_send
 
 	[name,fd,pcount,argc,argv,labels,pvars,sleeping,state] = running_progs[prog]
 	k = 0
@@ -180,10 +193,69 @@ def run_command(cmd,prog):
 			fd.seek(pcount,0)
 		res = OK
 	elif cmd[k] == "SND":
-		res = NOP
+		#res = NOP
+		(team,sender) = prog
+		arg1 = cmd[k+1]
+		if arg1[0] == '$':
+			recver =  int(pvars[arg1])
+		else: 
+			recver = int(arg1)
+
+		vars = cmd[k+2:]
+		print(vars)
+		message = struct.pack('!I',len(vars))
+		for a in range(len(vars)):
+			if vars[a][0] == '$':
+				vars[a] = int(pvars[vars[a]])
+			else:
+				vars[a] = int(vars[a])
+
+			message += struct.pack('!i',vars[a])
+
+		if (team,recver) in running_progs and running_progs[(team,recver)] != MIGRATRED:
+			messages_received[(team,sender,recver)] = vars #message,len(vars)
+			print(messages_received)
+		else:
+			messages_to_send[(team,sender,recver)] = message
+
+		state = BLOCKED
+		res = OK
 
 	elif cmd[k] == "RCV":
-		res = NOP
+		#res = NOP
+
+		(team,thread) = prog
+		arg1 = cmd[k+1]
+		if arg1[0] == '$':
+			sender =  int(pvars[arg1])
+		else: 
+			sender = int(arg1)
+
+		vars = cmd[k+2:]
+		print(vars)
+		for a in range(len(vars)):
+			if vars[a][0] == '$':
+				vars[a] = int(pvars[vars[a]])
+			else:
+				vars[a] = int(vars[a])		
+
+		if (team,sender,thread) in messages_received:
+			message = messages_received[(team,sender,thread)]
+			if message != vars:
+				state = BLOCKED
+				res = BLOCKED
+			else:
+				if (team,sender) in running_progs:
+					print("HELLO")
+					running_progs[(team,sender)][8] = READY
+					del  messages_received[(team,sender,thread)]
+				else:
+					pass
+					#sendRPC(ack...)
+				res = OK
+		else:
+			state = BLOCKED
+			res = BLOCKED
 
 	elif cmd[k] == "SLP":
 		arg1 = cmd[k+1]
@@ -191,7 +263,7 @@ def run_command(cmd,prog):
 		res = SLEEP
 	elif cmd[k] == "PRN":
 		t,p = prog
-		print("[",t,"]:","[",p,"]:")
+		print("[",t,"]","[",p,"]:",end = '')
 		#print(cmd)
 		for a in cmd[k+1:]:
 			if a[0] == '$':
@@ -237,10 +309,13 @@ def main():
 			team_id += 1
 			id = -1
 		#	threads_list[team_id] = []
+			print(runtime_cmd)
+			runtime_cmd[0] = runtime_cmd[0].split("run")[1]
+			print(runtime_cmd)
 			for r in runtime_cmd:
 				r = r.split()
 				id += 1
-				argv = r[1:]
+				argv = r
 				name = argv[0]
 				argc = len(argv)
 				labels = {}
@@ -253,7 +328,7 @@ def main():
 					tmp = "$arg" + str(i)
 					pvars[tmp] = argv[i]
 				running_progs[(team_id,id)] = [name,-1,0,argc,argv,labels,pvars,sleeping,state] #prog_info = [name,fd,pcount,argc,argv,labels,pvars]
-			if len(threads_list) == 1:
+			if len(threads_list) == len(runtime_cmd):
 				empty_list.release()
 		elif cmd == "list":
 			print("TEAM\t\tTHREAD\t\tNAME\t\tSTATE\t\t")
@@ -266,17 +341,22 @@ def main():
 					state = "READY"
 				elif running_progs[p][8] == DEAD:
 					state = "DEAD"
+				elif running_progs[p][8] == BLOCKED:
+					state = "BLOCKED"
 				(team,prog) = p
 				print(team,"\t\t",prog,"\t\t",running_progs[p][0],"\t\t",state)
 		elif cmd == "kill":
 				team_id = int(runtime_cmd[0].split()[1])
-				thr_id = int(runtime_cmd[0].split()[2])
-				key = (team_id,thr_id)
-				if key in threads_list:
-					print("Killed")
-					running_progs[key][8] = DEAD
-				else:
-					print("Thread not found")
+				#thr_id = int(runtime_cmd[0].split()[2])
+				#key = (team_id,thr_id)
+				#if key in threads_list:
+					#print("Killed")
+				for key in threads_list:
+					(t,p) = key
+					if t == team_id:
+						running_progs[key][8] = DEAD
+				
+				#print("Thread not found")
 		else:
 			print("Command not found")
 if __name__ == "__main__":

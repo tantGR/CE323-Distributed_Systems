@@ -10,8 +10,8 @@
 	ADD $sum $sum $n
 	ADD $n $n 1
 	BRA #LOOP
-#LEND	SLP 100
-	RCV 1 1
-	PRN "RECEIVED"
+#LEND   SLP 10	
+	PRN "SENDING..."
+	SND 0 1
 	PRN "Result is " $sum
 	RET

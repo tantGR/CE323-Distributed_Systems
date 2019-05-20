@@ -9,9 +9,8 @@
 #LOOP	BGT $n $arg1 #LEND
 	ADD $sum $sum $n
 	ADD $n $n 1
+	PRN "SENDING..."
+	SND 0 1
 	BRA #LOOP
-#LEND	SLP 100
-	RCV 1 1
-	PRN "RECEIVED"
-	PRN "Result is " $sum
+#LEND	PRN "Result is " $sum
 	RET
