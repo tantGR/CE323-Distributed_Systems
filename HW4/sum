@@ -11,7 +11,7 @@
 	ADD $n $n 1
 	BRA #LOOP
 #LEND	SLP 1000
-	RCV 1 1
+	RCV 1 1 2
 	PRN "RECEIVED"
 	PRN "Result is " $sum
 	RET

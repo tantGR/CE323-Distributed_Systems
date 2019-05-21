@@ -1,19 +1,23 @@
 import threading
 import os
 import struct
+import socket
 
-#prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED
+#prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED | MIGRATED
 READY = 10
 RUN = 15
 SLEEP = 20
 DEAD = 25
 BLOCKED = 30
 MIGRATRED = 35
+runtimes = 0
+runtimes_info = {}
 team_id = os.getpid()
-running_progs = {} #id:prog_info
-threads_list = [] #{(team,thread):[proginfo]} threads_list[(t,p)] = MIGRATRED
+running_progs = {} #t,p_id:prog_info = MIGRATRED
+threads_list = [] #[(team,thread)]
 messages_to_send = {} #{(grp,sender,receiver):msg}
 messages_received = {} #{(grp,sender,receiver):msg}
+migrate_info = {(team,thr):prog_info}
 empty_list = threading.Semaphore(0)
 Schedule = 5
 NOP = 0
@@ -32,14 +36,15 @@ def searchLabels(fd,prog):
 		if label[0] == "#" and label != "#SIMPLESCRIPT": 
 			running_progs[prog][5][label] = pos
 
-#def sendRPC():
+def sendRPC():
+	global migrate_info
 
 
 #def receiveRPC():
 
 
 def run_prog():
-	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED
+	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED,MIGRATRED
 
 	c = -1
 	while True:
@@ -63,7 +68,7 @@ def run_prog():
 			 continue
 		s = 0
 		running_progs[prog][8] = RUN
-		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED :
+		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED and running_progs[prog][8] != MIGRATRED :
 			[name,fd,pcount] = running_progs[prog][:3]
 			if fd == -1:
 				fd = open(name,'r')
@@ -293,10 +298,12 @@ class MyThread(threading.Thread):
         self._funcToRun(*self._args)
 
 def main():
-	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id
+	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes,runtimes_info
 
 	Thr1 = MyThread(run_prog,1,"run_prog")
 	Thr1.start()
+	Thr2 = MyThread(sendRPC,2,"sendRPC")
+	Thr2.start()
 
 	while True:
 		runtime_cmd = input()
@@ -346,17 +353,39 @@ def main():
 				(team,prog) = p
 				print(team,"\t\t",prog,"\t\t",running_progs[p][0],"\t\t",state)
 		elif cmd == "kill":
-				team_id = int(runtime_cmd[0].split()[1])
-				#thr_id = int(runtime_cmd[0].split()[2])
-				#key = (team_id,thr_id)
-				#if key in threads_list:
-					#print("Killed")
-				for key in threads_list:
-					(t,p) = key
-					if t == team_id:
-						running_progs[key][8] = DEAD
-				
-				#print("Thread not found")
+			team_id = int(runtime_cmd[0].split()[1])
+			#thr_id = int(runtime_cmd[0].split()[2])
+			#key = (team_id,thr_id)
+			#if key in threads_list:
+				#print("Killed")
+			for key in threads_list:
+				(t,p) = key
+				if t == team_id:
+					running_progs[key][8] = DEAD
+		elif cmd == "migrate":
+			[team,prog,ip,port] = (runtime_cmd[0].split()[1:])
+			team = int(team)
+			prog = int(prog)
+			port = int(port)
+
+			b = False
+			for r in runtimes_info:
+				if runtimes_info[r] == [ip,port]:
+					b = True
+					break
+			if not b:	
+				runtimes += 1
+				runtimes_info[0] = [ip,port] 
+
+			while running_progs[(team,prog)][8] == RUN:
+				pass
+			state = running_progs[(team,prog)][8]
+			if state == DEAD:
+				print("Thread:",prog,"of team", team,"ended execution")
+				continue
+			running_progs[(team,prog)][8] = MIGRATED
+			migrate_info[(team,prog)] = [ip,port,running_progs[(team,prog)]]
+
 		else:
 			print("Command not found")
 if __name__ == "__main__":
