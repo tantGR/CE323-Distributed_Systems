@@ -9,16 +9,18 @@ RUN = 15
 SLEEP = 20
 DEAD = 25
 BLOCKED = 30
-MIGRATRED = 35
+MIGRATED = 35
 runtimes = 0
 runtimes_info = {}
 team_id = os.getpid()
-running_progs = {} #t,p_id:prog_info = MIGRATRED
+TCP_PORT = 2019+os.getpid()
+running_progs = {} #t,p_id:prog_info = MIGRATED
 threads_list = [] #[(team,thread)]
 messages_to_send = {} #{(grp,sender,receiver):msg}
 messages_received = {} #{(grp,sender,receiver):msg}
-migrate_info = {(team,thr):prog_info}
+migrate_info = {} #{(team,thr):[ip,port,prog_info]}
 empty_list = threading.Semaphore(0)
+migrate_block = threading.Semaphore(0)
 Schedule = 5
 NOP = 0
 OK = 1
@@ -38,13 +40,105 @@ def searchLabels(fd,prog):
 
 def sendRPC():
 	global migrate_info
+	MIGRATE = 12
+	PROG_COMM = 21
+
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	
+	migrate_block.acquire()
+	done = []
+	for key in migrate_info:
+		(t,p) = key
+		ip = migrate_info[key][0]
+		port = migrate_info[key][1]
+		thr_info = migrate_info[key][2]
+		old_state = migrate_info[key][3]
+		sock.connect((ip,port))
+		 #name,pcount,argc,sleeping,state,labels length,pvars length
+		name = thr_info[0]
+		msg = struct.pack('!IIIIIIIIII',MIGRATE,t,p,thr_info[2],thr_info[3],thr_info[7],old_state,len(thr_info[5]),len(thr_info[6]),len(name))+name.encode()
+		#labels
+		for l in thr_info[5]:
+			pos = thr_info[5][l]
+			l = l.encode()
+			msg += struct.pack('!I',len(l)) + l + struct.pack('!I',pos)
+
+		for v in thr_info[6]:
+			val = thr_info[6][v]
+			v = v.encode()
+			val = (str(val)).encode()
+			msg += struct.pack('!II',len(v),len(val)) + v + val
+
+		sock.send(msg)
+
+		f = open(thr_info[0],'rb')
+		line = f.readline()
+		while line:
+			sock.send(line)
+			line = f.readline()
+		done.append(key)
+
+	for k in done:
+		del migrate_info[k]
 
 
-#def receiveRPC():
+def receiveRPC():
+	global TCP_PORT,running_progs,threads_list
+	MIGRATE = 12
+	PROG_COMM = 21
+
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.bind(('127.0.0.1',TCP_PORT))
+	print(sock.getsockname(),TCP_PORT)
+	sock.listen(1)
+
+	conn,addr = sock.accept()
+	data = conn.recv(1024)
+	(flag,) = struct.unpack('!I',data[:4])
+	data = data[4:] 
+	if flag == MIGRATE:
+		(team,thr_id,pcount,argc,sleeping,state,l_length,v_length,name_len) = struct.unpack('!IIIIIIIII',data[:36])
+		data = data[36:]
+	#	(name,) = struct.unpack('!s',data[:name_len])
+		name = data[:name_len].decode()
+		data = data[name_len:]
+		labels = {}
+		for i in range(l_length):
+			(len,) = struct.unpack('!I',data[:4])
+			data = data[4:]
+			l = data[:len].decode()
+			data = data[len:]
+			(pos,) = struct.unpack('!I',data[:4])
+			data = data[4:]
+			labels[l] = pos
+		#print(labels)
+
+		pvars = {}
+		for v in range(v_length):
+			print(data[:8])
+			(l_var,l_val,) = struct.unpack('!II',data[:8])
+			data = data[8:]
+			v = data[:l_var].decode()
+			data = data[l_var:]
+			val = data[:l_val].decode()
+			data = data[l_val:]
+			pvars[v] = val
+
+		#print(pvars)
+
+		with open('sum_test', 'wb') as f:
+			while True:
+				line = conn.recv(1024)
+				if not line:
+					break
+				f.write(line)
+		threads_list.append((team,thr_id))
+		empty_list.release()
+		running_progs[(team,thr_id)] = ["sum_test",-1,pcount,argc,{},labels,pvars,sleeping,state]
 
 
 def run_prog():
-	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED,MIGRATRED
+	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED,MIGRATED
 
 	c = -1
 	while True:
@@ -60,7 +154,7 @@ def run_prog():
 			#(t,p) = prog
 			del threads_list[c]
 			continue
-		if running_progs[prog][8] == BLOCKED:
+		if running_progs[prog][8] == BLOCKED or running_progs[prog][8] == MIGRATED :
 				continue
 
 		if running_progs[prog][7] > 0: #sleeping
@@ -68,16 +162,18 @@ def run_prog():
 			 continue
 		s = 0
 		running_progs[prog][8] = RUN
-		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED and running_progs[prog][8] != MIGRATRED :
+		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED and running_progs[prog][8] != MIGRATED :
 			[name,fd,pcount] = running_progs[prog][:3]
 			if fd == -1:
 				fd = open(name,'r')
 				searchLabels(fd,prog)
-				fd.seek(0,0)
+				fd.seek(pcount,0)
 			pcount = fd.tell()
 			#fd.seek(pcount,0)
 			curr_pos = pcount
 			command = fd.readline()
+			if running_progs[prog][0] != 'sum':
+				print(command)
 			if len(command) == 0:
 				#threads_list.append(prog)
 				continue
@@ -104,7 +200,7 @@ def run_prog():
 				break
 			elif res == BLOCKED:
 				running_progs[prog][1].seek(curr_pos,0)
-				print(pcount,running_progs[prog][1].tell())
+				#print(pcount,running_progs[prog][1].tell())
 				break
 			else:
 				s += 1
@@ -208,7 +304,7 @@ def run_command(cmd,prog):
 			recver = int(arg1)
 
 		vars = cmd[k+2:]
-		print(vars)
+		#print(vars)
 		message = struct.pack('!I',len(vars))
 		for a in range(len(vars)):
 			if vars[a][0] == '$':
@@ -218,9 +314,9 @@ def run_command(cmd,prog):
 
 			message += struct.pack('!i',vars[a])
 
-		if (team,recver) in running_progs and running_progs[(team,recver)] != MIGRATRED:
+		if (team,recver) in running_progs and running_progs[(team,recver)] != MIGRATED:
 			messages_received[(team,sender,recver)] = vars #message,len(vars)
-			print(messages_received)
+			#print(messages_received)
 		else:
 			messages_to_send[(team,sender,recver)] = message
 
@@ -238,7 +334,7 @@ def run_command(cmd,prog):
 			sender = int(arg1)
 
 		vars = cmd[k+2:]
-		print(vars)
+		#print(vars)
 		for a in range(len(vars)):
 			if vars[a][0] == '$':
 				vars[a] = int(pvars[vars[a]])
@@ -298,12 +394,14 @@ class MyThread(threading.Thread):
         self._funcToRun(*self._args)
 
 def main():
-	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes,runtimes_info
+	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes,runtimes_info,MIGRATED
 
 	Thr1 = MyThread(run_prog,1,"run_prog")
 	Thr1.start()
 	Thr2 = MyThread(sendRPC,2,"sendRPC")
 	Thr2.start()
+	Thr3 = MyThread(receiveRPC,3,"receiveRPC")
+	Thr3.start()
 
 	while True:
 		runtime_cmd = input()
@@ -315,7 +413,6 @@ def main():
 		if cmd == "run":
 			team_id += 1
 			id = -1
-		#	threads_list[team_id] = []
 			print(runtime_cmd)
 			runtime_cmd[0] = runtime_cmd[0].split("run")[1]
 			print(runtime_cmd)
@@ -350,6 +447,8 @@ def main():
 					state = "DEAD"
 				elif running_progs[p][8] == BLOCKED:
 					state = "BLOCKED"
+				elif running_progs[p][8] == MIGRATED:
+					state = "MIGRATED"
 				(team,prog) = p
 				print(team,"\t\t",prog,"\t\t",running_progs[p][0],"\t\t",state)
 		elif cmd == "kill":
@@ -384,7 +483,9 @@ def main():
 				print("Thread:",prog,"of team", team,"ended execution")
 				continue
 			running_progs[(team,prog)][8] = MIGRATED
-			migrate_info[(team,prog)] = [ip,port,running_progs[(team,prog)]]
+			running_progs[(team,prog)][1].close()
+			migrate_info[(team,prog)] = [ip,port,running_progs[(team,prog)],state]
+			migrate_block.release()
 
 		else:
 			print("Command not found")
