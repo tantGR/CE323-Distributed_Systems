@@ -4,6 +4,7 @@ import struct
 import socket
 
 #prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED | MIGRATED
+multicast_addr = ('224.0.0.6',2019)
 READY = 10
 RUN = 15
 SLEEP = 20
@@ -16,8 +17,9 @@ team_id = os.getpid()
 TCP_PORT = 2019+os.getpid()
 running_progs = {} #t,p_id:prog_info = MIGRATED
 threads_list = [] #[(team,thread)]
-messages_to_send = {} #{(grp,sender,receiver):msg}
 messages_received = {} #{(grp,sender,receiver):msg}
+udp_sends = {}
+udp_sender = threading.Semaphore(0)
 migrate_info = {} #{(team,thr):[ip,port,prog_info]}
 empty_list = threading.Semaphore(0)
 migrate_block = threading.Semaphore(0)
@@ -37,6 +39,58 @@ def searchLabels(fd,prog):
 		label = line.split()[0]
 		if label[0] == "#" and label != "#SIMPLESCRIPT": 
 			running_progs[prog][5][label] = pos
+
+def recvUdp():
+	global udp_received,multicast_addr,running_progs,READY,MIGRATED,threads_list,messages_received
+	ACK = 98
+	NORMAL = 89
+
+	(ip,p) = multicast_addr
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM,socket.IPPROTO_UDP)
+	group = socket.inet_aton(ip)
+	mreq = struct.pack('4sL',group,socket.INADDR_ANY)
+	sock.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,mreq)
+	sock.bind(multicast_addr)
+
+	data,addr = sock.recvfrom(1024)
+
+	[mtype,team,sender,recver] = struct.unpack('!IIII',data[0:16])
+	data = data[16:]
+	if (team,recver) in threads_list and running_progs[(team,recver)][8] != MIGRATED:
+		if mtype == ACK:
+				running_progs[(team,recver)][8] = READY
+		elif mtype == NORMAL:
+			(length,) = struct.unpack('!I',data[:4])
+			data = data[4:]
+			vals = []
+			for i in range(length):
+				(num,) = struct.unpack('!I',data[:4])
+				vals.append(num)
+				data = data[4:]
+			messages_received[(team,sender,recver)] = vals
+
+
+def sendUdp():
+	global udp_sender,udp_sends,multicast_addr
+	ACK = 98
+	NORMAL = 89
+
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+	del_list = []
+	while True:
+		udp_sender.acquire()
+
+		for s in udp_sends:
+			(team,sender,recver) = s
+			if udp_sends[s] == ACK:
+				message = struct.pack('!IIII',ACK,team,sender,recver)
+			else:
+				message = struct.pack('!IIII',NORMAL,team,sender,recver) + udp_sends[s][1]
+			sock.sendto(multicast_addr,message)
+			# receive ack 
+			del_list.append(s)
+		for s in del_list:
+			del udp_sends[s]
 
 def sendRPC():
 	global migrate_info
@@ -80,7 +134,6 @@ def sendRPC():
 
 	for k in done:
 		del migrate_info[k]
-
 
 def receiveRPC():
 	global TCP_PORT,running_progs,threads_list
@@ -136,7 +189,6 @@ def receiveRPC():
 		empty_list.release()
 		running_progs[(team,thr_id)] = ["sum_test",-1,pcount,argc,{},labels,pvars,sleeping,state]
 
-
 def run_prog():
 	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED,MIGRATED
 
@@ -172,8 +224,6 @@ def run_prog():
 			#fd.seek(pcount,0)
 			curr_pos = pcount
 			command = fd.readline()
-			if running_progs[prog][0] != 'sum':
-				print(command)
 			if len(command) == 0:
 				#threads_list.append(prog)
 				continue
@@ -213,6 +263,8 @@ def run_prog():
 
 def run_command(cmd,prog):
 	global OK,END,ERROR,NOP,SLEEP,BLOCKED,messages_received,messages_to_send
+	ACK = 98
+	NORMAL = 89
 
 	[name,fd,pcount,argc,argv,labels,pvars,sleeping,state] = running_progs[prog]
 	k = 0
@@ -313,12 +365,15 @@ def run_command(cmd,prog):
 				vars[a] = int(vars[a])
 
 			message += struct.pack('!i',vars[a])
+			for v in vars:
+				message += struct.pack('!I',v)
 
 		if (team,recver) in running_progs and running_progs[(team,recver)] != MIGRATED:
 			messages_received[(team,sender,recver)] = vars #message,len(vars)
 			#print(messages_received)
 		else:
-			messages_to_send[(team,sender,recver)] = message
+			udp_sends[(team,sender,recver)] = [NORMAL,message]
+			udp_sender.release()	
 
 		state = BLOCKED
 		res = OK
@@ -337,9 +392,9 @@ def run_command(cmd,prog):
 		#print(vars)
 		for a in range(len(vars)):
 			if vars[a][0] == '$':
-				vars[a] = int(pvars[vars[a]])
+				vars[a] = pvars[vars[a]]
 			else:
-				vars[a] = int(vars[a])		
+				vars[a] = vars[a]
 
 		if (team,sender,thread) in messages_received:
 			message = messages_received[(team,sender,thread)]
@@ -349,10 +404,10 @@ def run_command(cmd,prog):
 			else:
 				if (team,sender) in running_progs and running_progs[(team,sender)][8] == BLOCKED:
 					running_progs[(team,sender)][8] = READY
-					del  messages_received[(team,sender,thread)]
 				else:
-					pass
-					#sendRPC(ack...)
+					udp_sends[(team,thread,sender)] = ACK
+					udp_sender.release()
+				del  messages_received[(team,sender,thread)]
 				res = OK
 		else:
 			state = BLOCKED
@@ -402,6 +457,10 @@ def main():
 	Thr2.start()
 	Thr3 = MyThread(receiveRPC,3,"receiveRPC")
 	Thr3.start()
+	Thr4 = MyThread(recvUdp,4,"recvUdp")
+	Thr4.start()
+	Thr5 = MyThread(sendUdp,5,"sendUdp")
+	Thr5.start()
 
 	while True:
 		runtime_cmd = input()
@@ -426,7 +485,7 @@ def main():
 				pvars = {}
 				sleeping = 0
 				state = READY
-				threads_list.append((team_id,id))
+				threads_list.append((team_id,id))#team, threasd_id runtime
 				pvars["$argc"] = argc
 				for i in range(0,argc):
 					tmp = "$arg" + str(i)
@@ -459,7 +518,7 @@ def main():
 				#print("Killed")
 			for key in threads_list:
 				(t,p) = key
-				if t == team_id:
+				if t == team_id and running_progs[key][8] != MIGRATED:
 					running_progs[key][8] = DEAD
 		elif cmd == "migrate":
 			[team,prog,ip,port] = (runtime_cmd[0].split()[1:])
@@ -486,7 +545,6 @@ def main():
 			running_progs[(team,prog)][1].close()
 			migrate_info[(team,prog)] = [ip,port,running_progs[(team,prog)],state]
 			migrate_block.release()
-
 		else:
 			print("Command not found")
 if __name__ == "__main__":

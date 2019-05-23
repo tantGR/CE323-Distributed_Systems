@@ -9,8 +9,10 @@
 #LOOP	BGT $n $arg1 #LEND
 	ADD $sum $sum $n
 	ADD $n $n 1
-	SLP 102
+	SLP 100
 	BRA #LOOP
 #LEND	SLP 100	
+	PRN "WAITING"
+	RECV 1 1 2
 	PRN "Result is " $sum
 	RET

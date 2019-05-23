@@ -9,8 +9,9 @@
 #LOOP	BGT $n $arg1 #LEND
 	ADD $sum $sum $n
 	ADD $n $n 1
+	SLP 200
 	BRA #LOOP
-#LEND	SLP 10	
+#LEND	SLP 100	
 	PRN "SENDING..."
 	SND 0 1 2
 	PRN "Result is " $sum
