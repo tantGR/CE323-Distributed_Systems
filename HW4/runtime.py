@@ -5,16 +5,19 @@ import socket
 
 #prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED | MIGRATED
 multicast_addr = ('224.0.0.6',2019)
+balancing_multi = ('224.0.0.7',2020)
 READY = 10
 RUN = 15
 SLEEP = 20
 DEAD = 25
 BLOCKED = 30
 MIGRATED = 35
-runtimes = 0
+runtimes = {}
+runtimes_id = 0
 runtimes_info = {}
 team_id = os.getpid()
 TCP_PORT = 2019+os.getpid()
+TCP_IP = '127.0.0.1'
 running_progs = {} #t,p_id:prog_info = MIGRATED
 threads_list = [] #[(team,thread)]
 messages_received = {} #{(grp,sender,receiver):msg}
@@ -23,11 +26,13 @@ udp_sender = threading.Semaphore(0)
 migrate_info = {} #{(team,thr):[ip,port,prog_info]}
 empty_list = threading.Semaphore(0)
 migrate_block = threading.Semaphore(0)
+wait = threading.Semaphore(0)
 Schedule = 5
 NOP = 0
 OK = 1
 ERROR = -1
 END = -2
+COMING = 0
 
 def searchLabels(fd,prog):
 	global running_progs
@@ -41,7 +46,7 @@ def searchLabels(fd,prog):
 			running_progs[prog][5][label] = pos
 
 def recvUdp():
-	global udp_received,multicast_addr,running_progs,READY,MIGRATED,threads_list,messages_received,DEAD
+	global udp_received,multicast_addr,running_progs,READY,MIGRATED,threads_list,messages_received,DEAD,TCP_PORT
 	ACK = 98
 	NORMAL = 89
 
@@ -80,26 +85,45 @@ def recvUdp():
 				running_progs[(team,recver)][8] = READY
 
 def sendUdp():
-	global udp_sender,udp_sends,multicast_addr,DEAD
+	global udp_sender,udp_sends,multicast_addr,DEAD,balancing_multi
 	ACK = 98
 	NORMAL = 89
+	HELLO = 99
+	LOAD = 88
+	SYNC = 100
+	MYTHREADS = 101
 
 	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 	del_list = []
 	while True:
 		udp_sender.acquire()
-		print("Sending...")
 		for s in udp_sends:
-			(team,sender,recver) = s
-			if udp_sends[s] == ACK:
-				message = struct.pack('!IIII',ACK,team,sender,recver)
-				#print("sent ack to",team,recver)
-			elif udp_sends[s] == DEAD:
-				message = struct.pack('!IIII',DEAD,team,0,0)
+			if s == LOAD:
+				mtype = udp_sends[s][0]
+				#msg = "".encode()
+				if mtype == HELLO:
+					ip = udp_sends[s][1]
+					port = udp_sends[s][2]
+					msg = struct.pack('!II',HELLO,port) + ip.encode()
+				elif mtype == MYTHREADS:
+					num = udp_sends[s][1]
+					ip = udp_sends[s][2]
+					port = udp_sends[s][3]
+					msg = struct.pack('!III',MYTHREADS,num,port)+ip.encode()
+				elif mtype == SYNC:
+					msg = struct.pack('!I',SYNC)
+				sock.sendto(msg,balancing_multi)
 			else:
-				message = struct.pack('!IIII',NORMAL,team,sender,recver) + udp_sends[s][1]
-			sock.sendto(message,multicast_addr)
-			# receive ack 
+				(team,sender,recver) = udp_sends[s]
+				if udp_sends[s] == ACK:
+					message = struct.pack('!IIII',ACK,team,sender,recver)
+					#print("sent ack to",team,recver)
+				elif udp_sends[s] == DEAD:
+					message = struct.pack('!IIII',DEAD,team,0,0) 
+				else:
+					message = struct.pack('!IIII',NORMAL,team,sender,recver) + udp_sends[s][1]
+				sock.sendto(message,multicast_addr)
+			# receive ack --------------------------------------------------------
 			del_list.append(s)
 		for i in del_list:
 			del udp_sends[i]
@@ -109,97 +133,249 @@ def sendRPC():
 	global migrate_info
 	MIGRATE = 12
 	PROG_COMM = 21
+	ASK = 55
+	ANSWER = 44
 
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	
 	migrate_block.acquire()
 	done = []
 	for key in migrate_info:
-		(t,p) = key
-		ip = migrate_info[key][0]
-		port = migrate_info[key][1]
-		thr_info = migrate_info[key][2]
-		old_state = migrate_info[key][3]
-		sock.connect((ip,port))
-		 #name,pcount,argc,sleeping,state,labels length,pvars length
-		name = thr_info[0]
-		msg = struct.pack('!IIIIIIIIII',MIGRATE,t,p,thr_info[2],thr_info[3],thr_info[7],old_state,len(thr_info[5]),len(thr_info[6]),len(name))+name.encode()
-		#labels
-		for l in thr_info[5]:
-			pos = thr_info[5][l]
-			l = l.encode()
-			msg += struct.pack('!I',len(l)) + l + struct.pack('!I',pos)
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		if key == "ASK":
+			(ip,port) = migrate_info[key][0]
+			num = migrate_info[key][1]
+			avg = migrate_info[key][2]
+			msg = struct.pack('!IIII',ASK,num,avg,TCP_PORT)
+			sock.connect((ip,port))
+			sock.send(msg)
+		elif key == ANSWER:
+			[addr,num] = migrate_info[key]
+			msg = struct.pack('!II',ANSWER,num)
+			print(addr)
+			sock.connect(addr)
+			sock.send(msg)
+		else:
+			(t,p) = key
+			ip = migrate_info[key][0]
+			port = migrate_info[key][1]
+			thr_info = migrate_info[key][2]
+			old_state = migrate_info[key][3]
+			print(ip,port)
+			sock.connect((ip,port))
+			 #name,pcount,argc,sleeping,state,labels length,pvars length
+			name = thr_info[0]
+			msg = struct.pack('!IIIIIIIIII',MIGRATE,t,p,thr_info[2],thr_info[3],thr_info[7],old_state,len(thr_info[5]),len(thr_info[6]),len(name))+name.encode()
+			#labels
+			for l in thr_info[5]:
+				pos = thr_info[5][l]
+				l = l.encode()
+				msg += struct.pack('!I',len(l)) + l + struct.pack('!I',pos)
 
-		for v in thr_info[6]:
-			val = thr_info[6][v]
-			v = v.encode()
-			val = (str(val)).encode()
-			msg += struct.pack('!II',len(v),len(val)) + v + val
+			for v in thr_info[6]:
+				val = thr_info[6][v]
+				v = v.encode()
+				val = (str(val)).encode()
+				msg += struct.pack('!II',len(v),len(val)) + v + val
 
-		sock.send(msg)
+			sock.send(msg)
 
-		f = open(thr_info[0],'rb')
-		line = f.readline()
-		while line:
-			sock.send(line)
+			f = open(thr_info[0],'rb')
 			line = f.readline()
+			while line:
+				sock.send(line)
+				line = f.readline()
+		sock.shutdown(socket.SHUT_RDWR)
+		sock.close()
 		done.append(key)
 
 	for k in done:
 		del migrate_info[k]
 
 def receiveRPC():
-	global TCP_PORT,running_progs,threads_list
+	global TCP_PORT,running_progs,threads_list,migrate_block,COMING,wait
 	MIGRATE = 12
-	PROG_COMM = 21
+	ASK = 55
+	ANSWER = 44
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.bind(('127.0.0.1',TCP_PORT))
 	print(sock.getsockname(),TCP_PORT)
 	sock.listen(1)
 
-	conn,addr = sock.accept()
-	data = conn.recv(1024)
-	(flag,) = struct.unpack('!I',data[:4])
-	data = data[4:] 
-	if flag == MIGRATE:
-		(team,thr_id,pcount,argc,sleeping,state,l_length,v_length,name_len) = struct.unpack('!IIIIIIIII',data[:36])
-		data = data[36:]
-	#	(name,) = struct.unpack('!s',data[:name_len])
-		name = data[:name_len].decode()
-		data = data[name_len:]
-		labels = {}
-		for i in range(l_length):
-			(len,) = struct.unpack('!I',data[:4])
+	while True:
+		conn,addr = sock.accept()
+		data = conn.recv(1024)
+		(flag,) = struct.unpack('!I',data[:4])
+		data = data[4:] 
+		if flag == MIGRATE:
+			(team,thr_id,pcount,argc,sleeping,state,l_length,v_length,name_len) = struct.unpack('!IIIIIIIII',data[:36])
+			data = data[36:]
+			name = data[:name_len].decode()
+			data = data[name_len:]
+			labels = {}
+			for i in range(l_length):
+				(len,) = struct.unpack('!I',data[:4])
+				data = data[4:]
+				l = data[:len].decode()
+				data = data[len:]
+				(pos,) = struct.unpack('!I',data[:4])
+				data = data[4:]
+				labels[l] = pos
+			#print(labels)
+
+			pvars = {}
+			for v in range(v_length):
+				(l_var,l_val,) = struct.unpack('!II',data[:8])
+				data = data[8:]
+				v = data[:l_var].decode()
+				data = data[l_var:]
+				val = data[:l_val].decode()
+				data = data[l_val:]
+				pvars[v] = val
+
+			#print(pvars)
+
+			with open('sum_test', 'wb') as f:
+				while True:
+					line = conn.recv(1024)
+					if not line:
+						break
+					f.write(line)
+			threads_list.append((team,thr_id))
+			empty_list.release()
+			running_progs[(team,thr_id)] = ["sum_test",-1,pcount,argc,{},labels,pvars,sleeping,state]
+		elif flag == ASK:
+			(asked,average,dst_port) = struct.unpack('!III',data[:12])
+			counter = 0
+			for key in threads_list:
+				if running_progs[key][8] != MIGRATED and running_progs[key][8] != DEAD:
+					counter += 1
+			can_give = counter - average
+			[dst_ip,p] = addr
+			if can_give <= 0:
+				migrate_info[ANSWER] = [(dst_ip,dst_port),0]
+			else:
+				if can_give >= asked:
+					migrate_info[ANSWER] = [(dst_ip,dst_port),asked]
+					final = asked
+				else:
+					migrate_info[ANSWER] = [(dst_ip,dst_port),can_give]
+					final = can_give
+
+				q = 0
+				for key in running_progs:
+					if running_progs[key][8] != RUN and running_progs[key][8] != DEAD and running_progs[key][8] != MIGRATED:
+						state = running_progs[key][8]
+						running_progs[key][8] = MIGRATED
+						migrate_info[key] = [dst_ip,dst_port,running_progs[key],state]
+						q += 1
+						if q == final:
+							break
+
+			migrate_block.release()
+		elif flag == ANSWER:
+			(num,) = struct.unpack('!I',data[:4])
+			COMING = num
+			wait.release()
+
+def balance():
+	global TCP_PORT,TCP_IP,running_progs,threads_list,migrate_info,migrate_block,COMING,wait,runtimes
+
+	sum = 0 
+
+	for r in runtimes:
+ 		sum += runtimes[r]
+
+	average = sum // len(runtimes)
+	print("average",average)
+
+	my_threads = runtimes[(TCP_IP,TCP_PORT)]
+
+	if my_threads < average:
+		for key in runtimes:
+			if runtimes[key] > average:
+				wanted = average - my_threads
+				he_gives = runtimes[key] - average
+				if wanted <= he_gives:
+					migrate_info["ASK"] = [key,wanted,average]
+					print("ask ",wanted)
+				else:
+					migrate_info['ASK'] = [key,he_gives,average]
+					print("ask ",he_gives)
+				migrate_block.release()
+				wait.acquire()
+				if COMING > 0:
+					my_threads += COMING
+					if my_threads == average:
+						break
+
+def Load_balancing():
+	global udp_sends,udp_sender,threads_list,balancing_multi,TCP_PORT,running_progs,MIGRATED,TCP_IP,runtimes
+	HELLO = 99
+	LOAD = 88
+	SYNC = 100
+	MYTHREADS = 101
+	runtimes = {}
+	period = 5
+	# runtime_id = 0
+
+	(ip,port) = balancing_multi
+	sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM,socket.IPPROTO_UDP)
+	group = socket.inet_aton(ip)
+	mreq = struct.pack('4sL',group,socket.INADDR_ANY)
+	sock.setsockopt(socket.IPPROTO_IP,socket.IP_ADD_MEMBERSHIP,mreq)
+	sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+	sock.bind(balancing_multi)
+	sock.settimeout(period)
+
+	udp_sends[LOAD] = [HELLO,TCP_IP,TCP_PORT]
+	udp_sender.release()
+	#print("HELLO")
+	flag = False
+	while True:
+		try:
+			data,addr = sock.recvfrom(1024)
+		except socket.timeout:
+			if flag == True:
+				print("balance")
+				balance()
+				#udp_sends[LOAD] = [SYNC]
+				#udp_sender.release()
+				flag = False
+				#print("--------")
+			else:
+				print("TIMEOUT")
+				c = 0
+				for t in threads_list:
+					if running_progs[t][8] != MIGRATED and running_progs[t][8] != DEAD:
+						c += 1
+				print("thrs",c)
+				udp_sends[LOAD] = [MYTHREADS,c,TCP_IP,TCP_PORT]
+				udp_sender.release()
+				#print("#########")
+				flag = True
+		else:
+			(mtype,) = struct.unpack('!I',data[:4])
 			data = data[4:]
-			l = data[:len].decode()
-			data = data[len:]
-			(pos,) = struct.unpack('!I',data[:4])
-			data = data[4:]
-			labels[l] = pos
-		#print(labels)
+			if mtype == HELLO:
+				(port,) = struct.unpack('!I',data[:4])
+				ip = data[4:].decode()
+				print(ip,port)
+				if (ip,port) not in runtimes:
+					runtimes[(ip,port)] = 0
+				if ip!=TCP_IP and port != PORT:
+					udp_sends[LOAD] = [SYNC]
+					udp_sender.release()
+					print(ip,port,"is here!")  
+			elif mtype == SYNC:
+				sock.settimeout(period)
+			elif mtype == MYTHREADS:
+				(thrs,port) = struct.unpack('!II',data[:8])
+				data = data[8:]
+				ip = data.decode()
+				runtimes[(ip,port)] = thrs
 
-		pvars = {}
-		for v in range(v_length):
-			(l_var,l_val,) = struct.unpack('!II',data[:8])
-			data = data[8:]
-			v = data[:l_var].decode()
-			data = data[l_var:]
-			val = data[:l_val].decode()
-			data = data[l_val:]
-			pvars[v] = val
-
-		#print(pvars)
-
-		with open('sum_test', 'wb') as f:
-			while True:
-				line = conn.recv(1024)
-				if not line:
-					break
-				f.write(line)
-		threads_list.append((team,thr_id))
-		empty_list.release()
-		running_progs[(team,thr_id)] = ["sum_test",-1,pcount,argc,{},labels,pvars,sleeping,state]
 
 def run_prog():
 	global running_progs,Schedule,OK,ERROR,NOP,END,threads_list,empty_list,RUN,DEAD,SLEEP,READY,BLOCKED,MIGRATED,udp_sends,udp_sender
@@ -464,7 +640,7 @@ class MyThread(threading.Thread):
         self._funcToRun(*self._args)
 
 def main():
-	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes,runtimes_info,MIGRATED
+	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes_id,runtimes_info,MIGRATED
 
 	Thr1 = MyThread(run_prog,1,"run_prog")
 	Thr1.start()
@@ -476,6 +652,8 @@ def main():
 	Thr4.start()
 	Thr5 = MyThread(sendUdp,5,"sendUdp")
 	Thr5.start()
+	Thr6 = MyThread(Load_balancing,6,"Load_balancing")
+	Thr6.start()
 
 	while True:
 		runtime_cmd = input()
@@ -547,8 +725,8 @@ def main():
 					b = True
 					break
 			if not b:	
-				runtimes += 1
-				runtimes_info[0] = [ip,port] 
+				runtimes_id += 1
+				runtimes_info[runtimes_id] = [ip,port] 
 
 			while running_progs[(team,prog)][8] == RUN:
 				pass

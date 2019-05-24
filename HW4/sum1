@@ -13,7 +13,7 @@
 	BRA #LOOP
 #LEND	SLP 100	
 	PRN "SENDING..."
-	SND 0 1 2
+	SND 0 2
 	PRN "WAIT..."
 	RCV 0 3
 	PRN "Result is " $sum
