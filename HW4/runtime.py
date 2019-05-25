@@ -17,7 +17,7 @@ runtimes_id = 0
 runtimes_info = {}
 team_id = os.getpid()
 TCP_PORT = 2019+os.getpid()
-TCP_IP = '127.0.0.1'
+TCP_IP = ''
 running_progs = {} #t,p_id:prog_info = MIGRATED
 threads_list = [] #[(team,thread)]
 messages_received = {} #{(grp,sender,receiver):msg}
@@ -138,59 +138,60 @@ def sendRPC():
 
 	# sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	
-	migrate_block.acquire()
-	done = []
-	for key in migrate_info:
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		if key == "ASK":
-			(ip,port) = migrate_info[key][0]
-			num = migrate_info[key][1]
-			avg = migrate_info[key][2]
-			msg = struct.pack('!IIII',ASK,num,avg,TCP_PORT)
-			sock.connect((ip,port))
-			sock.send(msg)
-		elif key == ANSWER:
-			[addr,num] = migrate_info[key]
-			msg = struct.pack('!II',ANSWER,num)
-			print(addr)
-			sock.connect(addr)
-			sock.send(msg)
-		else:
-			(t,p) = key
-			ip = migrate_info[key][0]
-			port = migrate_info[key][1]
-			thr_info = migrate_info[key][2]
-			old_state = migrate_info[key][3]
-			print(ip,port)
-			sock.connect((ip,port))
-			 #name,pcount,argc,sleeping,state,labels length,pvars length
-			name = thr_info[0]
-			msg = struct.pack('!IIIIIIIIII',MIGRATE,t,p,thr_info[2],thr_info[3],thr_info[7],old_state,len(thr_info[5]),len(thr_info[6]),len(name))+name.encode()
-			#labels
-			for l in thr_info[5]:
-				pos = thr_info[5][l]
-				l = l.encode()
-				msg += struct.pack('!I',len(l)) + l + struct.pack('!I',pos)
+	while True:
+		migrate_block.acquire()
+		done = []
+		for key in migrate_info:
+			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			if key == "ASK":
+				(ip,port) = migrate_info[key][0]
+				num = migrate_info[key][1]
+				avg = migrate_info[key][2]
+				msg = struct.pack('!IIII',ASK,num,avg,TCP_PORT)
+				sock.connect((ip,port))
+				sock.send(msg)
+			elif key == ANSWER:
+				[addr,num] = migrate_info[key]
+				msg = struct.pack('!II',ANSWER,num)
+				print(addr)
+				sock.connect(addr)
+				sock.send(msg)
+			else:
+				(t,p) = key
+				ip = migrate_info[key][0]
+				port = migrate_info[key][1]
+				thr_info = migrate_info[key][2]
+				old_state = migrate_info[key][3]
+				print(ip,port)
+				sock.connect((ip,port))
+				 #name,pcount,argc,sleeping,state,labels length,pvars length
+				name = thr_info[0]
+				msg = struct.pack('!IIIIIIIIII',MIGRATE,t,p,thr_info[2],thr_info[3],thr_info[7],old_state,len(thr_info[5]),len(thr_info[6]),len(name))+name.encode()
+				#labels
+				for l in thr_info[5]:
+					pos = thr_info[5][l]
+					l = l.encode()
+					msg += struct.pack('!I',len(l)) + l + struct.pack('!I',pos)
 
-			for v in thr_info[6]:
-				val = thr_info[6][v]
-				v = v.encode()
-				val = (str(val)).encode()
-				msg += struct.pack('!II',len(v),len(val)) + v + val
+				for v in thr_info[6]:
+					val = thr_info[6][v]
+					v = v.encode()
+					val = (str(val)).encode()
+					msg += struct.pack('!II',len(v),len(val)) + v + val
 
-			sock.send(msg)
+				sock.send(msg)
 
-			f = open(thr_info[0],'rb')
-			line = f.readline()
-			while line:
-				sock.send(line)
+				f = open(thr_info[0],'rb')
 				line = f.readline()
-		sock.shutdown(socket.SHUT_RDWR)
-		sock.close()
-		done.append(key)
+				while line:
+					sock.send(line)
+					line = f.readline()
+			sock.shutdown(socket.SHUT_RDWR)
+			sock.close()
+			done.append(key)
 
-	for k in done:
-		del migrate_info[k]
+		for k in done:
+			del migrate_info[k]
 
 def receiveRPC():
 	global TCP_PORT,running_progs,threads_list,migrate_block,COMING,wait
@@ -199,8 +200,10 @@ def receiveRPC():
 	ANSWER = 44
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	sock.bind(('127.0.0.1',TCP_PORT))
-	print(sock.getsockname(),TCP_PORT)
+	sock.bind(('',TCP_PORT))
+	# print(socket.gethostbyname(s,TCP_PORT))
+	# print(socket.gethostbyname(socket.gethostname()))
+	
 	sock.listen(1)
 
 	while True:
@@ -269,6 +272,7 @@ def receiveRPC():
 						state = running_progs[key][8]
 						running_progs[key][8] = MIGRATED
 						migrate_info[key] = [dst_ip,dst_port,running_progs[key],state]
+						running_progs[key][1].close()
 						q += 1
 						if q == final:
 							break
@@ -336,6 +340,8 @@ def Load_balancing():
 	while True:
 		try:
 			data,addr = sock.recvfrom(1024)
+			#print(addr)
+			(t_ip,po) = addr
 		except socket.timeout:
 			if flag == True:
 				print("balance")
@@ -361,20 +367,23 @@ def Load_balancing():
 			if mtype == HELLO:
 				(port,) = struct.unpack('!I',data[:4])
 				ip = data[4:].decode()
-				print(ip,port)
-				if (ip,port) not in runtimes:
-					runtimes[(ip,port)] = 0
-				if ip!=TCP_IP and port != PORT:
+				#print(ip,port)
+				if (t_ip,port) not in runtimes:
+					if port == TCP_PORT:
+						TCP_IP = t_ip
+					runtimes[(t_ip,port)] = 0
+				#print(TCP_IP,TCP_PORT)
+				if t_ip!=TCP_IP or port != TCP_PORT:
 					udp_sends[LOAD] = [SYNC]
 					udp_sender.release()
-					print(ip,port,"is here!")  
+					print(t_ip,port,"is here!")  
 			elif mtype == SYNC:
 				sock.settimeout(period)
 			elif mtype == MYTHREADS:
 				(thrs,port) = struct.unpack('!II',data[:8])
 				data = data[8:]
-				ip = data.decode()
-				runtimes[(ip,port)] = thrs
+				#ip = data.decode()
+				runtimes[(t_ip,port)] = thrs
 
 
 def run_prog():
@@ -640,7 +649,7 @@ class MyThread(threading.Thread):
         self._funcToRun(*self._args)
 
 def main():
-	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes_id,runtimes_info,MIGRATED
+	global prog_id,running_progs,threads_list,READY,RUN,SLEEP,DEAD,team_id,migrate_info,runtimes_id,runtimes_info,MIGRATED,runtimes
 
 	Thr1 = MyThread(run_prog,1,"run_prog")
 	Thr1.start()
@@ -700,6 +709,7 @@ def main():
 				elif running_progs[p][8] == BLOCKED:
 					state = "BLOCKED"
 				elif running_progs[p][8] == MIGRATED:
+					continue
 					state = "MIGRATED"
 				(team,prog) = p
 				print(team,"\t\t",prog,"\t\t",running_progs[p][0],"\t\t",state)
@@ -738,6 +748,31 @@ def main():
 			running_progs[(team,prog)][1].close()
 			migrate_info[(team,prog)] = [ip,port,running_progs[(team,prog)],state]
 			migrate_block.release()
+		elif cmd == "shutdown":
+			#print(runtimes)
+			if len(runtimes) <= 1 and len(threads_list) > 0:
+				print("This is the only runtime running")
+				continue
+
+			rlist = []
+			for key in runtimes:
+				if key != (TCP_IP,TCP_PORT):
+					rlist.append(key)
+
+			i = 0
+			end = len(rlist)
+			for key in running_progs:
+				state = running_progs[key][8]
+				if state == DEAD  or state == MIGRATED:
+					continue
+				running_progs[key][8] = MIGRATED
+				running_progs[key][1].close()
+				(ip,port) = rlist[i]
+				migrate_info[key] = [ip,port,running_progs[key],state]
+				migrate_block.release()
+				i += 1
+				if i == end:
+					i = 0
 		else:
 			print("Command not found")
 if __name__ == "__main__":

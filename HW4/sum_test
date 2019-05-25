@@ -11,4 +11,4 @@
 	SLP 100
 	BRA #LOOP
 #LEND PRN "Result is " $sum
-	RET
+RET
