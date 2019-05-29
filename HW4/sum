@@ -14,7 +14,5 @@
 #LEND	SLP 100	
 	PRN "WAITING"
 	RCV 1 2
-	PRN "SEND 3"
-	SND 1 3
 	PRN "Result is " $sum
 	RET

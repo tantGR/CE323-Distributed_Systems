@@ -3,6 +3,7 @@ import os
 import struct
 import socket
 
+
 #prog_info = [name,fd,pcount,argc,argv,labels,pvars,sleeping,state] state = READY | RUN | SLEEP | DEAD | BLOCKED | MIGRATED
 multicast_addr = ('224.0.0.6',2019)
 balancing_multi = ('224.0.0.7',2020)
@@ -59,7 +60,7 @@ def recvUdp():
 	sock.bind(multicast_addr)
 
 	while True:
-		print("Receiving...")
+		#print("Receiving...")
 		data,addr = sock.recvfrom(1024)
 
 		[mtype,team,sender,recver] = struct.unpack('!IIII',data[0:16])
@@ -81,8 +82,11 @@ def recvUdp():
 					(num,) = struct.unpack('!I',data[:4])
 					vals.append(num)
 					data = data[4:]
-				messages_received[(team,sender,recver)] = vals
-				running_progs[(team,recver)][8] = READY
+				if (team,recver) in threads_list and running_progs[(team,recver)][8] != MIGRATED:
+					messages_received[(team,sender,recver)] = vals
+					running_progs[(team,recver)][8] = READY
+					msg = struct.pack('!I',1)
+					sock.sendto(msg,addr)
 
 def sendUdp():
 	global udp_sender,udp_sends,multicast_addr,DEAD,balancing_multi
@@ -114,7 +118,7 @@ def sendUdp():
 					msg = struct.pack('!I',SYNC)
 				sock.sendto(msg,balancing_multi)
 			else:
-				(team,sender,recver) = udp_sends[s]
+				(team,sender,recver) = s
 				if udp_sends[s] == ACK:
 					message = struct.pack('!IIII',ACK,team,sender,recver)
 					#print("sent ack to",team,recver)
@@ -123,7 +127,17 @@ def sendUdp():
 				else:
 					message = struct.pack('!IIII',NORMAL,team,sender,recver) + udp_sends[s][1]
 				sock.sendto(message,multicast_addr)
-			# receive ack --------------------------------------------------------
+				sock.settimeout(3)
+				while True:
+					try:
+						data = sock.recv(10)
+						(ack,) = struct.unpack('!I',data[:4])
+						if ack == 1:
+							continue
+					except socket.timeout:
+						sock.sendto(message,multicast_addr)
+					else:
+						break
 			del_list.append(s)
 		for i in del_list:
 			del udp_sends[i]
@@ -198,6 +212,7 @@ def receiveRPC():
 	MIGRATE = 12
 	ASK = 55
 	ANSWER = 44
+	w = 0
 
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	sock.bind(('',TCP_PORT))
@@ -238,16 +253,20 @@ def receiveRPC():
 				pvars[v] = val
 
 			#print(pvars)
-
-			with open('sum_test', 'wb') as f:
+			w += 1
+			flag = os.path.isfile(name) 
+			if flag:
+				name = name + str(w)
+			with open(name, 'wb') as f:
 				while True:
 					line = conn.recv(1024)
 					if not line:
 						break
+					#if not flag:
 					f.write(line)
 			threads_list.append((team,thr_id))
 			empty_list.release()
-			running_progs[(team,thr_id)] = ["sum_test",-1,pcount,argc,{},labels,pvars,sleeping,state]
+			running_progs[(team,thr_id)] = [name,-1,pcount,argc,{},labels,pvars,sleeping,state]
 		elif flag == ASK:
 			(asked,average,dst_port) = struct.unpack('!III',data[:12])
 			counter = 0
@@ -272,7 +291,7 @@ def receiveRPC():
 						state = running_progs[key][8]
 						running_progs[key][8] = MIGRATED
 						migrate_info[key] = [dst_ip,dst_port,running_progs[key],state]
-						running_progs[key][1].close()
+						#running_progs[key][1].close()
 						q += 1
 						if q == final:
 							break
@@ -344,14 +363,14 @@ def Load_balancing():
 			(t_ip,po) = addr
 		except socket.timeout:
 			if flag == True:
-				print("balance")
+				#print("balance")
 				balance()
 				#udp_sends[LOAD] = [SYNC]
 				#udp_sender.release()
 				flag = False
 				#print("--------")
 			else:
-				print("TIMEOUT")
+				#print("TIMEOUT")
 				c = 0
 				for t in threads_list:
 					if running_progs[t][8] != MIGRATED and running_progs[t][8] != DEAD:
@@ -397,66 +416,77 @@ def run_prog():
 		if threads_list == []:
 			empty_list.acquire()
 			c=0
-		prog = threads_list[c]
-		if running_progs[prog][8] == DEAD:
-			del running_progs[prog]
-			#(t,p) = prog
-			del threads_list[c]
-			continue
-		if running_progs[prog][8] == BLOCKED or running_progs[prog][8] == MIGRATED :
+		try:
+			prog = threads_list[c]
+		except IndexError:
+			#print('ERROR',c)
+			c =0 
+			if len(threads_list) == 0:
+				empty_list.acquire()
+		else:
+			if running_progs[prog][8] == DEAD:
+				del running_progs[prog]
+				#(t,p) = prog
+				del threads_list[c]
 				continue
+			if running_progs[prog][8] == BLOCKED or running_progs[prog][8] == MIGRATED :
+					continue
 
-		if running_progs[prog][7] > 0: #sleeping
-			 running_progs[prog][7] -= 1
-			 continue
-		s = 0
-		running_progs[prog][8] = RUN
-		while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED and running_progs[prog][8] != MIGRATED :
-			[name,fd,pcount] = running_progs[prog][:3]
-			if fd == -1:
-				fd = open(name,'r')
-				searchLabels(fd,prog)
-				fd.seek(pcount,0)
-			pcount = fd.tell()
-			#fd.seek(pcount,0)
-			curr_pos = pcount
-			command = fd.readline()
-			if len(command) == 0:
-				#threads_list.append(prog)
-				continue
-			running_progs[prog][:3] = [name,fd,pcount]
-			# print(command)
-			res = run_command(command,prog)
-			if res == ERROR:
-				(t,p) = prog
-				print("Error in prog,",p,"of team",t)
-				running_progs[prog][1].close()
-				running_progs[prog][8] = DEAD
-				(t,p) = prog
-				for key in running_progs:
-					(a,b) = key
-					if a == t:
-						running_progs[key][8] = DEAD
-				udp_sends[(t,p,0)] = DEAD
-				break
-			elif res == END:
-				running_progs[prog][1].close()
-				running_progs[prog][8] = DEAD
-				break
-			elif res == SLEEP:
-				running_progs[prog][8] = SLEEP
-				break
-			elif res == BLOCKED:
-				running_progs[prog][1].seek(curr_pos,0)
-				#print(pcount,running_progs[prog][1].tell())
-				break
-			else:
-				s += 1
-				continue
-		#running_progs[prog][:3] = [name,fd,pcount]
-		if running_progs[prog][8] == RUN:
-			running_progs[prog][8] = READY
-		#threads_list.append(prog)
+			if running_progs[prog][7] > 0: #sleeping
+				 running_progs[prog][7] -= 1
+				 continue
+			s = 0
+			running_progs[prog][8] = RUN
+			while s < Schedule and running_progs[prog][8] != DEAD and running_progs[prog][8] != BLOCKED and running_progs[prog][8] != MIGRATED :
+				[name,fd,pcount] = running_progs[prog][:3]
+				if fd == -1:
+				#	print("open new file",prog)
+					fd = open(name,'r')
+					searchLabels(fd,prog)
+					fd.seek(pcount,0)
+				pcount = fd.tell()
+				#fd.seek(pcount,0)
+				curr_pos = pcount
+				command = fd.readline()
+				if len(command) == 0:
+					#threads_list.append(prog)
+					continue
+				running_progs[prog][:3] = [name,fd,pcount]
+				# print(command)
+				res = run_command(command,prog)
+				if res == ERROR:
+					(t,p) = prog
+					print("Error in prog,",p,"of team",t)
+					running_progs[prog][1].close()
+					running_progs[prog][8] = DEAD
+					(t,p) = prog
+					for key in running_progs:
+						(a,b) = key
+						if a == t:
+							running_progs[key][8] = DEAD
+					udp_sends[(t,p,0)] = DEAD
+					udp_sender.release()
+					break
+				elif res == END:
+					running_progs[prog][1].close()
+					running_progs[prog][8] = DEAD
+					break
+				elif res == SLEEP:
+					running_progs[prog][8] = SLEEP
+					break
+				elif res == BLOCKED:
+					running_progs[prog][1].seek(curr_pos,0)
+					#print(pcount,running_progs[prog][1].tell())
+					break
+				else:
+					s += 1
+					continue
+			#running_progs[prog][:3] = [name,fd,pcount]
+			#if fd.closed():
+			#	print("PROBLEM")
+			if running_progs[prog][8] == RUN:
+				running_progs[prog][8] = READY
+			#threads_list.append(prog)
 
 def run_command(cmd,prog):
 	global OK,END,ERROR,NOP,SLEEP,BLOCKED,messages_received,messages_to_send,udp_sender
